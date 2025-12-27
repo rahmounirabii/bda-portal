@@ -3,7 +3,8 @@ import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuthContext } from '@/app/providers/AuthProvider';
+import { AuthService } from '@/entities/auth/auth.service';
 import {
   BarChart3,
   BookOpen,
@@ -28,7 +29,7 @@ interface DashboardLayoutProps {
 
 const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   const { t, language, setLanguage, isRTL } = useLanguage();
-  const { user, logout } = useAuth();
+  const { user } = useAuthContext();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -79,9 +80,14 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
 
   const closeSidebar = () => setSidebarOpen(false);
 
-  const handleSignOut = () => {
-    logout();
-    closeSidebar();
+  const handleSignOut = async () => {
+    try {
+      await AuthService.signOut();
+      closeSidebar();
+      // La redirection sera gérée par le AuthProvider
+    } catch (error) {
+      console.error('Erreur lors de la déconnexion:', error);
+    }
   };
 
   return (
@@ -218,16 +224,17 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
                 {/* Profile info */}
                 <div className="flex items-center gap-x-2">
                   <Avatar className="h-8 w-8">
-                    <AvatarImage src="" alt={user?.displayName || "User"} />
+                    <AvatarImage src="" alt={user?.profile?.first_name || "User"} />
                     <AvatarFallback className="bg-primary text-white">
-                      {user?.displayName?.split(' ').map(n => n[0]).join('').toUpperCase() || 
-                       user?.username?.substring(0, 2).toUpperCase() || 
+                      {user?.profile?.first_name?.substring(0, 1).toUpperCase() ||
                        user?.email?.substring(0, 1).toUpperCase() || 'BDA'}
                     </AvatarFallback>
                   </Avatar>
                   <div className="hidden lg:flex lg:flex-col lg:text-sm lg:leading-4">
                     <p className="font-semibold text-gray-900">
-                      {user?.displayName || user?.username || 'BDA Member'}
+                      {user?.profile?.first_name && user?.profile?.last_name
+                        ? `${user.profile.first_name} ${user.profile.last_name}`
+                        : user?.email || 'BDA Member'}
                     </p>
                     <p className="text-gray-600">
                       {user?.email || 'member@bda-global.org'}

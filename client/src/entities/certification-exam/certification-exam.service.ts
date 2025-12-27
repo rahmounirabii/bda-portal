@@ -1,0 +1,451 @@
+/**
+ * Certification Exam Service
+ * Gestion des examens officiels de certification (différents des mock exams)
+ * Utilise la table 'quizzes' avec exam_type='certification'
+ */
+
+import { supabase } from '@/shared/config/supabase.config';
+import type { QuizService } from '@/entities/quiz/quiz.service';
+
+export type CertificationExamType = 'CP' | 'SCP';
+export type ExamStatus = 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+
+export interface CertificationExam {
+  id: string;
+  title: string;
+  title_ar?: string;
+  description?: string;
+  description_ar?: string;
+  certification_type: CertificationExamType;
+  difficulty_level: 'easy' | 'medium' | 'hard';
+  time_limit_minutes: number;
+  passing_score_percentage: number;
+  is_active: boolean;
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+  // Stats
+  question_count?: number;
+  total_points?: number;
+}
+
+export interface CertificationAttempt {
+  id: string;
+  quiz_id: string;
+  user_id: string;
+  exam_type: 'certification'; // Always 'certification' for official exams
+  started_at: string;
+  completed_at?: string;
+  score?: number;
+  passed?: boolean;
+  time_spent_minutes?: number;
+}
+
+export interface UserCertificationExamStats {
+  total_attempts: number;
+  passed_attempts: number;
+  failed_attempts: number;
+  best_score: number | null;
+  last_attempt_date: string | null;
+  is_certified: boolean;
+  certification_id?: string;
+}
+
+/**
+ * Service pour gérer les examens de certification officiels
+ */
+export class CertificationExamService {
+
+  // ==========================================================================
+  // ADMIN - GESTION DES EXAMENS
+  // ==========================================================================
+
+  /**
+   * Obtenir tous les examens de certification (admin)
+   */
+  static async getAllCertificationExams(): Promise<{
+    data: CertificationExam[] | null;
+    error: any;
+  }> {
+    try {
+      const { data, error } = await supabase
+        .from('quizzes')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching certification exams:', error);
+        return { data: null, error };
+      }
+
+      // Enrichir avec stats
+      const examsWithStats = await Promise.all(
+        (data || []).map(async (exam) => {
+          const { data: questions } = await supabase
+            .from('quiz_questions')
+            .select('points')
+            .eq('quiz_id', exam.id);
+
+          return {
+            ...exam,
+            question_count: questions?.length || 0,
+            total_points: questions?.reduce((sum, q) => sum + (q.points || 1), 0) || 0,
+          };
+        })
+      );
+
+      return { data: examsWithStats, error: null };
+    } catch (error) {
+      console.error('Error in getAllCertificationExams:', error);
+      return { data: null, error };
+    }
+  }
+
+  /**
+   * Créer un nouvel examen de certification (admin)
+   */
+  static async createCertificationExam(dto: {
+    title: string;
+    title_ar?: string;
+    description?: string;
+    description_ar?: string;
+    certification_type: CertificationExamType;
+    difficulty_level?: 'easy' | 'medium' | 'hard';
+    time_limit_minutes?: number;
+    passing_score_percentage?: number;
+  }): Promise<{ data: CertificationExam | null; error: any }> {
+    try {
+      const { data: user } = await supabase.auth.getUser();
+
+      const { data, error } = await supabase
+        .from('quizzes')
+        .insert({
+          ...dto,
+          difficulty_level: dto.difficulty_level || 'medium',
+          time_limit_minutes: dto.time_limit_minutes || 120,
+          passing_score_percentage: dto.passing_score_percentage || 70,
+          is_active: false, // Désactivé par défaut jusqu'à ajout de questions
+          created_by: user.user?.id,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating certification exam:', error);
+        return { data: null, error };
+      }
+
+      return { data, error: null };
+    } catch (error) {
+      console.error('Error in createCertificationExam:', error);
+      return { data: null, error };
+    }
+  }
+
+  /**
+   * Mettre à jour un examen de certification (admin)
+   */
+  static async updateCertificationExam(
+    examId: string,
+    dto: Partial<CertificationExam>
+  ): Promise<{ data: CertificationExam | null; error: any }> {
+    try {
+      const { data, error } = await supabase
+        .from('quizzes')
+        .update(dto)
+        .eq('id', examId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error updating certification exam:', error);
+        return { data: null, error };
+      }
+
+      return { data, error: null };
+    } catch (error) {
+      console.error('Error in updateCertificationExam:', error);
+      return { data: null, error };
+    }
+  }
+
+  /**
+   * Supprimer un examen de certification (admin)
+   */
+  static async deleteCertificationExam(examId: string): Promise<{ error: any }> {
+    try {
+      const { data, error } = await supabase
+        .from('quizzes')
+        .delete()
+        .eq('id', examId)
+        .select();
+
+      if (error) {
+        console.error('Error deleting certification exam:', error);
+        return { error };
+      }
+
+      // Check if any row was actually deleted
+      if (!data || data.length === 0) {
+        const notFoundError = new Error('Exam not found or could not be deleted. You may not have permission to delete this exam.');
+        console.error('No exam deleted:', notFoundError);
+        return { error: notFoundError };
+      }
+
+      return { error: null };
+    } catch (error) {
+      console.error('Error in deleteCertificationExam:', error);
+      return { error };
+    }
+  }
+
+  /**
+   * Activer/Désactiver un examen (admin)
+   */
+  static async toggleExamActive(
+    examId: string,
+    isActive: boolean
+  ): Promise<{ data: CertificationExam | null; error: any }> {
+    return this.updateCertificationExam(examId, { is_active: isActive });
+  }
+
+  /**
+   * Obtenir statistiques globales d'un examen (admin)
+   */
+  static async getExamStatistics(examId: string): Promise<{
+    data: {
+      total_attempts: number;
+      unique_candidates: number;
+      pass_rate: number;
+      average_score: number;
+      certified_count: number;
+    } | null;
+    error: any;
+  }> {
+    try {
+      // Récupérer toutes les tentatives
+      const attemptsQuery = await supabase
+        .from('quiz_attempts')
+        .select('user_id, completed_at')
+        .eq('quiz_id', examId)
+        .eq('exam_type', 'certification')
+        .not('completed_at', 'is', null);
+
+      const { data: attempts, error: attemptsError } = attemptsQuery;
+
+      if (attemptsError) {
+        return { data: null, error: attemptsError };
+      }
+
+      // Récupérer les certifications délivrées
+      const attemptIds = (attempts || []).map(a => a.user_id);
+      const { data: certifications, error: certError } = await supabase
+        .from('user_certifications')
+        .select('id')
+        .in('quiz_attempt_id', attemptIds);
+
+      const uniqueCandidates = new Set((attempts || []).map(a => a.user_id)).size;
+
+      return {
+        data: {
+          total_attempts: attempts?.length || 0,
+          unique_candidates: uniqueCandidates,
+          pass_rate: 0, // TODO: Calculate from scores
+          average_score: 0, // TODO: Calculate from scores
+          certified_count: certifications?.length || 0,
+        },
+        error: null,
+      };
+    } catch (error) {
+      console.error('Error in getExamStatistics:', error);
+      return { data: null, error };
+    }
+  }
+
+  // ==========================================================================
+  // CANDIDATS - PASSER LES EXAMENS
+  // ==========================================================================
+
+  /**
+   * Obtenir les examens de certification disponibles pour l'utilisateur
+   */
+  static async getAvailableCertificationExams(
+    certificationType?: CertificationExamType
+  ): Promise<{ data: CertificationExam[] | null; error: any }> {
+    try {
+      let query = supabase
+        .from('quizzes')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+
+      if (certificationType) {
+        query = query.eq('certification_type', certificationType);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Error fetching available exams:', error);
+        return { data: null, error };
+      }
+
+      // Enrichir avec stats utilisateur
+      const examsWithStats = await Promise.all(
+        (data || []).map(async (exam) => {
+          const stats = await this.getUserExamStats(exam.id);
+          return {
+            ...exam,
+            ...stats,
+          };
+        })
+      );
+
+      return { data: examsWithStats, error: null };
+    } catch (error) {
+      console.error('Error in getAvailableCertificationExams:', error);
+      return { data: null, error };
+    }
+  }
+
+  /**
+   * Obtenir les statistiques de l'utilisateur pour un examen
+   */
+  static async getUserExamStats(
+    examId: string
+  ): Promise<UserCertificationExamStats> {
+    try {
+      const { data: user } = await supabase.auth.getUser();
+      if (!user.user) {
+        return {
+          total_attempts: 0,
+          passed_attempts: 0,
+          failed_attempts: 0,
+          best_score: null,
+          last_attempt_date: null,
+          is_certified: false,
+        };
+      }
+
+      // Récupérer les tentatives de l'utilisateur
+      const { data: attempts } = await supabase
+        .from('quiz_attempts')
+        .select('*')
+        .eq('quiz_id', examId)
+        .eq('user_id', user.user.id)
+        .eq('exam_type', 'certification')
+        .not('completed_at', 'is', null)
+        .order('completed_at', { ascending: false });
+
+      // Vérifier si l'utilisateur est certifié
+      const { data: certification } = await supabase
+        .from('user_certifications')
+        .select('id')
+        .eq('user_id', user.user.id)
+        .eq('status', 'active')
+        .maybeSingle();
+
+      return {
+        total_attempts: attempts?.length || 0,
+        passed_attempts: 0, // TODO: Count from scores
+        failed_attempts: 0, // TODO: Count from scores
+        best_score: null, // TODO: Calculate max score
+        last_attempt_date: attempts?.[0]?.completed_at || null,
+        is_certified: !!certification,
+        certification_id: certification?.id,
+      };
+    } catch (error) {
+      console.error('Error in getUserExamStats:', error);
+      return {
+        total_attempts: 0,
+        passed_attempts: 0,
+        failed_attempts: 0,
+        best_score: null,
+        last_attempt_date: null,
+        is_certified: false,
+      };
+    }
+  }
+
+  /**
+   * Démarrer une tentative d'examen de certification
+   */
+  static async startCertificationAttempt(
+    examId: string
+  ): Promise<{ data: CertificationAttempt | null; error: any }> {
+    try {
+      const { data: user } = await supabase.auth.getUser();
+      if (!user.user) {
+        return { data: null, error: new Error('User not authenticated') };
+      }
+
+      // Vérifier que l'examen existe et est actif
+      const { data: exam, error: examError } = await supabase
+        .from('quizzes')
+        .select('id, is_active')
+        .eq('id', examId)
+        .single();
+
+      if (examError || !exam?.is_active) {
+        return { data: null, error: new Error('Exam not available') };
+      }
+
+      // Créer la tentative
+      const { data: attempt, error: attemptError } = await supabase
+        .from('quiz_attempts')
+        .insert({
+          quiz_id: examId,
+          user_id: user.user.id,
+          exam_type: 'certification' as const,
+          started_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (attemptError) {
+        console.error('Error creating certification attempt:', attemptError);
+        return { data: null, error: attemptError };
+      }
+
+      return { data: attempt as any as CertificationAttempt, error: null };
+    } catch (error) {
+      console.error('Error in startCertificationAttempt:', error);
+      return { data: null, error };
+    }
+  }
+
+  /**
+   * Obtenir l'historique des tentatives de l'utilisateur
+   */
+  static async getUserAttemptHistory(): Promise<{
+    data: CertificationAttempt[] | null;
+    error: any;
+  }> {
+    try {
+      const { data: user } = await supabase.auth.getUser();
+      if (!user.user) {
+        return { data: null, error: new Error('User not authenticated') };
+      }
+
+      const { data, error } = await supabase
+        .from('quiz_attempts')
+        .select(`
+          *,
+          quiz:quizzes(title, title_ar, certification_type)
+        `)
+        .eq('user_id', user.user.id)
+        .eq('exam_type', 'certification')
+        .order('started_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching user attempt history:', error);
+        return { data: null, error };
+      }
+
+      return { data: data as any, error: null };
+    } catch (error) {
+      console.error('Error in getUserAttemptHistory:', error);
+      return { data: null, error };
+    }
+  }
+}

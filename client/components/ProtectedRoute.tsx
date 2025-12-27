@@ -1,18 +1,15 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuthContext } from '@/app/providers/AuthProvider';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
   requireAuth?: boolean;
 }
 
-export function ProtectedRoute({ children, requireAuth = true }: ProtectedRouteProps) {
-  const { isAuthenticated, isLoading, checkAuth } = useAuth();
+function ProtectedRoute({ children, requireAuth = true }: ProtectedRouteProps) {
+  const { user, isLoading } = useAuthContext();
   const location = useLocation();
-
-  // Remove the useEffect that causes redirect loops
-  // Authentication is already checked on app mount
 
   // Show loading spinner while checking authentication
   if (isLoading) {
@@ -24,14 +21,19 @@ export function ProtectedRoute({ children, requireAuth = true }: ProtectedRouteP
   }
 
   // Redirect to login if authentication is required but user is not authenticated
-  if (requireAuth && !isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+  if (requireAuth && !user) {
+    // Sauvegarder la route actuelle pour redirection après login
+    return <Navigate to="/login" state={{ from: location.pathname }} replace />;
   }
 
-  // Redirect to dashboard if user is authenticated but trying to access login page
-  if (!requireAuth && isAuthenticated && location.pathname === '/login') {
-    return <Navigate to="/dashboard" replace />;
+  // Redirect to intended page if user is authenticated but trying to access login page
+  if (!requireAuth && user && location.pathname === '/login') {
+    // Récupérer la route originale depuis l'état ou rediriger vers dashboard
+    const from = location.state?.from || '/dashboard';
+    return <Navigate to={from} replace />;
   }
 
   return <>{children}</>;
 }
+
+export default ProtectedRoute;

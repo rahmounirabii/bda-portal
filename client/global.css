@@ -12,6 +12,11 @@
    * A different format will require also updating the theme in tailwind.config.ts.
   */
   :root {
+    /* BDA Corporate Colors */
+    --bda-sky: 199 95% 54%; /* #1E9BF5 - Sky Blue (B) */
+    --bda-royal: 209 50% 33%; /* #2C5282 - Royal Blue (D) */
+    --bda-navy: 210 52% 25%; /* #1E3A5F - Navy (A) */
+
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
 
@@ -21,42 +26,38 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
 
-    --primary: 220 69% 32%;
+    /* BDA Primary: Royal Blue */
+    --primary: 209 50% 33%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 204 92% 47%;
+    /* BDA Secondary: Sky Blue */
+    --secondary: 199 95% 54%;
     --secondary-foreground: 0 0% 100%;
 
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 199 95% 54%;
+    --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --ring: 209 50% 33%;
 
     --radius: 0.5rem;
 
-    --sidebar-background: 0 0% 98%;
-
-    --sidebar-foreground: 240 5.3% 26.1%;
-
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* BDA Sidebar */
+    --sidebar-background: 210 52% 25%; /* Navy */
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 199 95% 54%; /* Sky */
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 209 50% 33%; /* Royal */
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 210 50% 35%;
+    --sidebar-ring: 199 95% 54%;
   }
 
   .dark {

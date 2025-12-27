@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Montserrat:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    @page {
+      size: A4 landscape;
+      margin: 0;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Montserrat', 'Arial', sans-serif;
+      width: 297mm;
+      height: 210mm;
+      background: linear-gradient(135deg, #1e3a5f 0%, #0d1f33 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    .certificate-container {
+      width: 282mm;
+      height: 196mm;
+      background: #ffffff;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Decorative corner elements */
+    .corner-decoration {
+      position: absolute;
+      width: 80px;
+      height: 80px;
+    }
+    .corner-decoration.top-left {
+      top: 15px;
+      left: 15px;
+      border-top: 3px solid #C9A227;
+      border-left: 3px solid #C9A227;
+    }
+    .corner-decoration.top-right {
+      top: 15px;
+      right: 15px;
+      border-top: 3px solid #C9A227;
+      border-right: 3px solid #C9A227;
+    }
+    .corner-decoration.bottom-left {
+      bottom: 15px;
+      left: 15px;
+      border-bottom: 3px solid #C9A227;
+      border-left: 3px solid #C9A227;
+    }
+    .corner-decoration.bottom-right {
+      bottom: 15px;
+      right: 15px;
+      border-bottom: 3px solid #C9A227;
+      border-right: 3px solid #C9A227;
+    }
+
+    /* Subtle background pattern */
+    .background-pattern {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-image:
+        radial-gradient(circle at 20% 80%, rgba(33, 150, 243, 0.03) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(30, 58, 95, 0.03) 0%, transparent 50%);
+      z-index: 0;
+    }
+
+    .certificate-content {
+      position: relative;
+      z-index: 10;
+      text-align: center;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      padding: 25px 40px;
+    }
+
+    /* Header with decorative line */
+    .header {
+      margin-bottom: 8px;
+    }
+
+    .header-line {
+      width: 100%;
+      height: 4px;
+      background: linear-gradient(to right, transparent, #2196F3, #1e3a5f, #2196F3, transparent);
+      margin-bottom: 20px;
+    }
+
+    .certificate-label {
+      font-size: 11px;
+      font-weight: 500;
+      color: #C9A227;
+      letter-spacing: 6px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .certificate-title {
+      font-family: 'Playfair Display', 'Georgia', serif;
+      font-size: 42px;
+      font-weight: 700;
+      color: #1e3a5f;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      margin-bottom: 5px;
+    }
+
+    .certificate-subtitle {
+      font-size: 14px;
+      font-weight: 300;
+      color: #666;
+      letter-spacing: 1px;
+    }
+
+    /* Main content */
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 10px 0;
+    }
+
+    .presented-to {
+      font-size: 13px;
+      font-weight: 400;
+      color: #888;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .recipient-name {
+      font-family: 'Playfair Display', 'Georgia', serif;
+      font-size: 48px;
+      font-weight: 600;
+      color: #1e3a5f;
+      margin: 10px 0 15px;
+      position: relative;
+      display: inline-block;
+    }
+
+    .recipient-name::after {
+      content: '';
+      position: absolute;
+      bottom: -5px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 60%;
+      height: 2px;
+      background: linear-gradient(to right, transparent, #C9A227, transparent);
+    }
+
+    .achievement-text {
+      font-size: 14px;
+      color: #555;
+      line-height: 1.8;
+      max-width: 600px;
+      margin: 15px auto;
+    }
+
+    .certification-badge {
+      display: inline-block;
+      background: linear-gradient(135deg, #1e3a5f 0%, #2196F3 100%);
+      color: white;
+      padding: 12px 40px;
+      border-radius: 50px;
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      margin: 15px 0;
+      box-shadow: 0 4px 15px rgba(33, 150, 243, 0.3);
+    }
+
+    .credential-section {
+      margin: 12px 0;
+    }
+
+    .credential-label {
+      font-size: 10px;
+      color: #999;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 5px;
+    }
+
+    .credential-id {
+      font-size: 20px;
+      font-weight: 600;
+      color: #C9A227;
+      letter-spacing: 3px;
+      font-family: 'Montserrat', monospace;
+    }
+
+    .exam-score {
+      font-size: 12px;
+      color: #666;
+      margin-top: 8px;
+    }
+
+    .exam-score strong {
+      color: #1e3a5f;
+      font-weight: 600;
+    }
+
+    /* Footer */
+    .footer-section {
+      margin-top: auto;
+    }
+
+    .dates-row {
+      display: flex;
+      justify-content: center;
+      gap: 60px;
+      margin-bottom: 15px;
+    }
+
+    .date-item {
+      text-align: center;
+    }
+
+    .date-label {
+      font-size: 9px;
+      color: #999;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 3px;
+    }
+
+    .date-value {
+      font-size: 13px;
+      font-weight: 500;
+      color: #1e3a5f;
+    }
+
+    .signatures-row {
+      display: flex;
+      justify-content: space-around;
+      padding: 0 80px;
+      margin-bottom: 15px;
+    }
+
+    .signature-block {
+      text-align: center;
+      min-width: 180px;
+    }
+
+    .signature-line {
+      width: 160px;
+      height: 1px;
+      background: linear-gradient(to right, transparent, #ccc, transparent);
+      margin: 0 auto 8px;
+    }
+
+    .signature-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #1e3a5f;
+      margin-bottom: 2px;
+    }
+
+    .signature-title {
+      font-size: 10px;
+      color: #888;
+      font-weight: 400;
+    }
+
+    /* Logo at bottom */
+    .logo-section {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #eee;
+    }
+
+    .logo-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    .logo-text {
+      display: flex;
+      align-items: baseline;
+    }
+
+    .logo-b {
+      font-size: 36px;
+      font-weight: 700;
+      color: #2196F3;
+      font-family: 'Montserrat', sans-serif;
+    }
+
+    .logo-da {
+      font-size: 36px;
+      font-weight: 700;
+      color: #1e3a5f;
+      font-family: 'Montserrat', sans-serif;
+    }
+
+    .logo-full-name {
+      font-size: 10px;
+      font-weight: 500;
+      color: #666;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-left: 15px;
+    }
+
+    .verification-url {
+      font-size: 9px;
+      color: #aaa;
+      margin-top: 8px;
+      letter-spacing: 1px;
+    }
+
+    /* Watermark */
+    .watermark {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-30deg);
+      font-size: 180px;
+      font-weight: 700;
+      color: rgba(33, 150, 243, 0.03);
+      z-index: 1;
+      letter-spacing: 20px;
+      font-family: 'Montserrat', sans-serif;
+    }
+
+    /* Seal/Badge decoration */
+    .seal {
+      position: absolute;
+      bottom: 60px;
+      right: 60px;
+      width: 80px;
+      height: 80px;
+      border: 3px solid #C9A227;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #fff 0%, #f9f6f0 100%);
+    }
+
+    .seal-inner {
+      width: 60px;
+      height: 60px;
+      border: 1px solid #C9A227;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+    }
+
+    .seal-text {
+      font-size: 8px;
+      font-weight: 600;
+      color: #1e3a5f;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .seal-year {
+      font-size: 14px;
+      font-weight: 700;
+      color: #C9A227;
+    }
+  </style>
+</head>
+<body>
+  <div class="certificate-container">
+    <!-- Background pattern -->
+    <div class="background-pattern"></div>
+
+    <!-- Corner decorations -->
+    <div class="corner-decoration top-left"></div>
+    <div class="corner-decoration top-right"></div>
+    <div class="corner-decoration bottom-left"></div>
+    <div class="corner-decoration bottom-right"></div>
+
+    <!-- Watermark -->
+    <div class="watermark">CP</div>
+
+    <!-- Seal -->
+    <div class="seal">
+      <div class="seal-inner">
+        <span class="seal-text">Certified</span>
+        <span class="seal-year">2025</span>
+      </div>
+    </div>
+
+    <div class="certificate-content">
+      <!-- Header -->
+      <div class="header">
+        <div class="header-line"></div>
+        <div class="certificate-label">Official Certificate</div>
+        <div class="certificate-title">Certificate of Achievement</div>
+        <div class="certificate-subtitle">Professional Certification Program</div>
+      </div>
+
+      <!-- Main Content -->
+      <div class="main-content">
+        <div class="presented-to">This is to certify that</div>
+
+        <div class="recipient-name">rabii rahmouni</div>
+
+        <div class="achievement-text">
+          has successfully completed all requirements and demonstrated exceptional competence
+          in the field of Business Development, thereby earning the professional designation of
+        </div>
+
+        <div class="certification-badge">Certified Professional (CP™)</div>
+
+        <div class="credential-section">
+          <div class="credential-label">Credential ID</div>
+          <div class="credential-id">CP-2025-0001</div>
+        </div>
+
+        
+        <div class="exam-score">
+          Examination Score: <strong>85%</strong>
+        </div>
+        
+      </div>
+
+      <!-- Footer -->
+      <div class="footer-section">
+        <div class="dates-row">
+          <div class="date-item">
+            <div class="date-label">Date Issued</div>
+            <div class="date-value">November 5, 2025</div>
+          </div>
+          <div class="date-item">
+            <div class="date-label">Valid Until</div>
+            <div class="date-value">November 5, 2028</div>
+          </div>
+        </div>
+
+        <div class="signatures-row">
+          <div class="signature-block">
+            <div class="signature-line"></div>
+            <div class="signature-name">Dr. Sarah Johnson</div>
+            <div class="signature-title">President, BDA</div>
+          </div>
+
+          <div class="signature-block">
+            <div class="signature-line"></div>
+            <div class="signature-name">Prof. Michael Chen</div>
+            <div class="signature-title">Chief Certification Officer</div>
+          </div>
+        </div>
+
+        <!-- Logo Section at Bottom -->
+        <div class="logo-section">
+          <div class="logo-container">
+            <div class="logo-text">
+              <span class="logo-b">B</span><span class="logo-da">DA</span>
+            </div>
+            <div class="logo-full-name">Business Development Association</div>
+          </div>
+          <div class="verification-url">
+            Verify at: portal.bda-association.com/verify/CP-2025-0001
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

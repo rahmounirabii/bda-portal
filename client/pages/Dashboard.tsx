@@ -1,12 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuthContext } from '@/app/providers/AuthProvider';
 import { BarChart3, Award, Gift, TrendingUp, Users, Globe } from "lucide-react";
 
 export default function Dashboard() {
   const { t } = useLanguage();
-  const { user } = useAuth();
+  const { user } = useAuthContext();
 
   const metrics = [
     {
@@ -37,7 +37,7 @@ export default function Dashboard() {
       title: "Completed Exams",
       value: "3",
       icon: Gift,
-      color: "text-purple-600",
+      color: "text-royal-600",
       bgColor: "bg-purple-100",
       subtitle: "This year"
     },
@@ -48,7 +48,7 @@ export default function Dashboard() {
       {/* Welcome section */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900">
-          Welcome back, {user?.displayName?.split(' ')[0] || 'Member'}! 👋
+          Welcome back, {user?.profile?.first_name || user?.email?.split('@')[0] || 'Member'}! 👋
         </h1>
         <p className="mt-2 text-gray-600">
           {new Date().toLocaleDateString('en-US', { 

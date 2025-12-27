@@ -1,0 +1,175 @@
+-- Migration: Add certification exam results and answers tracking
+-- Date: 2025-10-01
+-- Description: Extend quiz_attempts to store scores and create quiz_attempt_answers table
+
+-- =============================================================================
+-- MODIFY TABLE: quiz_attempts
+-- Add columns for storing exam results
+-- =============================================================================
+
+ALTER TABLE public.quiz_attempts
+ADD COLUMN IF NOT EXISTS score INTEGER,
+ADD COLUMN IF NOT EXISTS total_points_earned INTEGER,
+ADD COLUMN IF NOT EXISTS total_points_possible INTEGER,
+ADD COLUMN IF NOT EXISTS passed BOOLEAN,
+ADD COLUMN IF NOT EXISTS time_spent_minutes INTEGER;
+
+-- Add constraints
+ALTER TABLE public.quiz_attempts
+ADD CONSTRAINT valid_score CHECK (score IS NULL OR (score >= 0 AND score <= 100));
+
+-- Comment
+COMMENT ON COLUMN public.quiz_attempts.score IS 'Final score as percentage (0-100)';
+COMMENT ON COLUMN public.quiz_attempts.total_points_earned IS 'Total points earned by user';
+COMMENT ON COLUMN public.quiz_attempts.total_points_possible IS 'Total possible points for the quiz';
+COMMENT ON COLUMN public.quiz_attempts.passed IS 'Whether user passed the exam';
+COMMENT ON COLUMN public.quiz_attempts.time_spent_minutes IS 'Time spent in minutes';
+
+-- =============================================================================
+-- CREATE TABLE: quiz_attempt_answers
+-- Store user's answers for each question
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS public.quiz_attempt_answers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    -- Relations
+    attempt_id UUID NOT NULL REFERENCES public.quiz_attempts(id) ON DELETE CASCADE,
+    question_id UUID NOT NULL REFERENCES public.quiz_questions(id) ON DELETE CASCADE,
+
+    -- User's answer(s)
+    selected_answer_ids UUID[] NOT NULL, -- Array to support multi_select
+
+    -- Correction
+    is_correct BOOLEAN NOT NULL DEFAULT false,
+    points_earned INTEGER NOT NULL DEFAULT 0,
+
+    -- Metadata
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+    -- Constraints
+    CONSTRAINT unique_attempt_question UNIQUE (attempt_id, question_id)
+);
+
+-- Indexes
+CREATE INDEX idx_quiz_attempt_answers_attempt ON public.quiz_attempt_answers(attempt_id);
+CREATE INDEX idx_quiz_attempt_answers_question ON public.quiz_attempt_answers(question_id);
+
+-- =============================================================================
+-- ROW LEVEL SECURITY (RLS)
+-- =============================================================================
+
+-- Enable RLS
+ALTER TABLE public.quiz_attempt_answers ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Users can view their own attempt answers
+CREATE POLICY "Users can view their own attempt answers"
+ON public.quiz_attempt_answers FOR SELECT
+TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM public.quiz_attempts
+        WHERE id = quiz_attempt_answers.attempt_id
+        AND user_id = auth.uid()
+    )
+    OR
+    EXISTS (
+        SELECT 1 FROM public.users
+        WHERE id = auth.uid()
+        AND role IN ('admin', 'super_admin')
+    )
+);
+
+-- Policy: Users can insert answers for their own attempts
+CREATE POLICY "Users can insert answers for their attempts"
+ON public.quiz_attempt_answers FOR INSERT
+TO authenticated
+WITH CHECK (
+    EXISTS (
+        SELECT 1 FROM public.quiz_attempts
+        WHERE id = quiz_attempt_answers.attempt_id
+        AND user_id = auth.uid()
+    )
+);
+
+-- Policy: Users can update answers for their own attempts (for correction)
+CREATE POLICY "Users can update their own attempt answers"
+ON public.quiz_attempt_answers FOR UPDATE
+TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM public.quiz_attempts
+        WHERE id = quiz_attempt_answers.attempt_id
+        AND user_id = auth.uid()
+    )
+)
+WITH CHECK (
+    EXISTS (
+        SELECT 1 FROM public.quiz_attempts
+        WHERE id = quiz_attempt_answers.attempt_id
+        AND user_id = auth.uid()
+    )
+);
+
+-- Policy: Admins can manage all attempt answers
+CREATE POLICY "Admins can manage all attempt answers"
+ON public.quiz_attempt_answers FOR ALL
+TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM public.users
+        WHERE id = auth.uid()
+        AND role IN ('admin', 'super_admin')
+    )
+);
+
+-- =============================================================================
+-- UPDATE EXISTING RLS POLICIES FOR quiz_attempts
+-- =============================================================================
+
+-- Drop old policies if they exist
+DROP POLICY IF EXISTS "Users can view their attempts" ON public.quiz_attempts;
+DROP POLICY IF EXISTS "Admins can view all attempts" ON public.quiz_attempts;
+
+-- Policy: Users can view their own attempts
+CREATE POLICY "Users can view their own attempts"
+ON public.quiz_attempts FOR SELECT
+TO authenticated
+USING (user_id = auth.uid());
+
+-- Policy: Admins can view all attempts
+CREATE POLICY "Admins can view all attempts"
+ON public.quiz_attempts FOR SELECT
+TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM public.users
+        WHERE id = auth.uid()
+        AND role IN ('admin', 'super_admin')
+    )
+);
+
+-- Policy: Users can create their own attempts
+CREATE POLICY "Users can create their own attempts"
+ON public.quiz_attempts FOR INSERT
+TO authenticated
+WITH CHECK (user_id = auth.uid());
+
+-- Policy: Users can update their own attempts (for completion/scoring)
+CREATE POLICY "Users can update their own attempts"
+ON public.quiz_attempts FOR UPDATE
+TO authenticated
+USING (user_id = auth.uid())
+WITH CHECK (user_id = auth.uid());
+
+-- Policy: Admins can manage all attempts
+CREATE POLICY "Admins can manage all attempts"
+ON public.quiz_attempts FOR ALL
+TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM public.users
+        WHERE id = auth.uid()
+        AND role IN ('admin', 'super_admin')
+    )
+);

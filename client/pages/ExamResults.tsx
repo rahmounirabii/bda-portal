@@ -218,7 +218,7 @@ export default function ExamResults() {
                 <p className="text-sm text-gray-600">Questions Attempted</p>
               </div>
               <div className="text-center">
-                <div className="text-3xl font-bold text-purple-600 mb-2">
+                <div className="text-3xl font-bold text-royal-600 mb-2">
                   {totalQuestions - Object.keys(answers).length}
                 </div>
                 <p className="text-sm text-gray-600">Questions Skipped</p>

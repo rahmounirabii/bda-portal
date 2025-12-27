@@ -1,12 +1,21 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { authManager, User } from '@/lib/auth';
+import { supabase, signIn, signOut } from '@/lib/supabase';
+import type { User } from '@supabase/supabase-js';
+import type { Database } from '@/../../shared/database.types';
+
+// Type pour l'utilisateur avec profil Supabase
+type UserProfile = Database['public']['Tables']['users']['Row'];
+
+interface AuthUser extends User {
+  profile?: UserProfile;
+}
 
 interface AuthContextType {
-  user: User | null;
+  user: AuthUser | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (username: string, password: string) => Promise<void>;
-  logout: () => void;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
   checkAuth: () => Promise<boolean>;
 }
 
@@ -17,41 +26,69 @@ interface AuthProviderProps {
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const isAuthenticated = user !== null && authManager.isTokenValid();
+  const isAuthenticated = user !== null;
 
   // Check authentication status on mount
   useEffect(() => {
     checkAuth();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'SIGNED_IN' && session?.user) {
+          await loadUserProfile(session.user);
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null);
+        }
+        setIsLoading(false);
+      }
+    );
+
+    return () => subscription.unsubscribe();
   }, []);
+
+  // Load user profile from Supabase
+  const loadUserProfile = async (authUser: User) => {
+    try {
+      const { data: profile, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', authUser.id)
+        .single();
+
+      if (error) {
+        console.error('Error loading user profile:', error);
+        setUser(authUser); // Set auth user without profile
+      } else {
+        setUser({ ...authUser, profile });
+      }
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+      setUser(authUser); // Set auth user without profile
+    }
+  };
 
   // Check if user is authenticated
   const checkAuth = async (): Promise<boolean> => {
     setIsLoading(true);
-    
+
     try {
-      // Get user from session storage
-      const storedUser = authManager.getCurrentUser();
-      
-      // Check if we have both user data and valid token
-      if (storedUser && authManager.isTokenValid()) {
-        // For page reloads, trust the token without API validation to avoid delays
-        // The token will be validated on actual API calls
-        setUser(storedUser);
+      const { data: { user: authUser }, error } = await supabase.auth.getUser();
+
+      if (error || !authUser) {
+        setUser(null);
         setIsLoading(false);
-        return true;
+        return false;
       }
-      
-      // Clear invalid session (without redirect)
-      authManager.clearSession();
-      setUser(null);
+
+      await loadUserProfile(authUser);
       setIsLoading(false);
-      return false;
+      return true;
     } catch (error) {
       console.error('Auth check failed:', error);
-      authManager.clearSession();
       setUser(null);
       setIsLoading(false);
       return false;
@@ -59,12 +96,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
   };
 
   // Login function
-  const login = async (username: string, password: string): Promise<void> => {
+  const login = async (email: string, password: string): Promise<void> => {
     setIsLoading(true);
-    
+
     try {
-      const userData = await authManager.login(username, password);
-      setUser(userData);
+      const { data, error } = await signIn(email, password);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      if (data?.user) {
+        await loadUserProfile(data.user);
+      }
     } catch (error) {
       console.error('Login failed:', error);
       throw error;
@@ -74,9 +118,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
   };
 
   // Logout function
-  const logout = () => {
-    authManager.logout();
-    setUser(null);
+  const logout = async () => {
+    try {
+      await signOut();
+      setUser(null);
+    } catch (error) {
+      console.error('Logout failed:', error);
+      setUser(null); // Force logout on error
+    }
   };
 
   const value: AuthContextType = {

@@ -1,0 +1,833 @@
+/**
+ * PDP (Professional Development Provider) Service
+ * API calls for PDP partner management
+ */
+
+import { supabase } from '@/lib/supabase';
+import type {
+  PDPProgram,
+  PdpProgram,
+  ProgramFilters,
+  PdpProgramFilters,
+  PdpProgramStats,
+  PdpProgramResult,
+  PDPDashboardStats,
+  BockCompetency,
+  CreateProgramDTO,
+  UpdateProgramDTO,
+  AnnualReport,
+  CreateReportDTO,
+  UpdateReportDTO,
+  PDPLicenseInfo,
+  ProgramSlotStatus,
+  CreateLicenseRequestDTO,
+  PDPLicenseRequest,
+  PDPToolkitItem,
+  ToolkitCategory,
+  PDPPartnerProfile,
+  UpdatePDPPartnerProfileDTO,
+  PDPGuideline,
+  GuidelineCategory,
+  CreatePDPGuidelineDTO,
+  UpdatePDPGuidelineDTO,
+} from './pdp.types';
+
+interface ServiceResult<T> {
+  data: T | null;
+  error: Error | null;
+}
+
+export class PDPService {
+  // ==========================================================================
+  // Dashboard
+  // ==========================================================================
+
+  static async getDashboardStats(): Promise<ServiceResult<PDPDashboardStats>> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase.rpc('get_pdp_dashboard_stats', {
+        p_partner_id: user.id,
+      });
+
+      if (error) throw error;
+      return { data: data as PDPDashboardStats, error: null };
+    } catch (error) {
+      console.error('Error fetching PDP dashboard stats:', error);
+      return { data: null, error: error as Error };
+    }
+  }
+
+  // ==========================================================================
+  // BoCK Competencies
+  // ==========================================================================
+
+  static async getBockCompetencies(): Promise<ServiceResult<BockCompetency[]>> {
+    try {
+      const { data, error } = await supabase
+        .from('bock_competencies')
+        .select('*')
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true });
+
+      if (error) throw error;
+      return { data: data as BockCompetency[], error: null };
+    } catch (error) {
+      console.error('Error fetching BoCK competencies:', error);
+      return { data: null, error: error as Error };
+    }
+  }
+
+  // ==========================================================================
+  // Programs (Partner)
+  // ==========================================================================
+
+  static async getMyPrograms(filters: ProgramFilters = {}): Promise<ServiceResult<PDPProgram[]>> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      let query = supabase
+        .from('pdp_programs')
+        .select('*')
+        .eq('provider_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (filters.status) {
+        query = query.eq('status', filters.status);
+      }
+      if (filters.activity_type) {
+        query = query.eq('activity_type', filters.activity_type);
+      }
+      if (filters.is_active !== undefined) {
+        query = query.eq('is_active', filters.is_active);
+      }
+      if (filters.search) {
+        query = query.or(`program_name.ilike.%${filters.search}%,program_id.ilike.%${filters.search}%`);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return { data: data as PDPProgram[], error: null };
+    } catch (error) {
+      console.error('Error fetching programs:', error);
+      return { data: null, error: error as Error };
+    }
+  }
+
+  static async getProgram(id: string): Promise<ServiceResult<PDPProgram>> {
+    try {
+      const { data, error } = await supabase
+        .from('pdp_programs')
+        .select(`
+          *,
+          competencies:pdp_program_competencies(
+            id,
+            competency_id,
+            relevance_level,
+            competency:bock_competencies(*)
+          )
+        `)
+        .eq('id', id)
+        .single();
+
+      if (error) throw error;
+      return { data: data as PDPProgram, error: null };
+    } catch (error) {
+      console.error('Error fetching program:', error);
+      return { data: null, error: error as Error };
+    }
+  }
+
+  static async createProgram(dto: CreateProgramDTO): Promise<ServiceResult<PDPProgram>> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // Get user's company name for provider_name
+      const { data: userData } = await supabase
+        .from('users')
+        .select('company_name')
+        .eq('id', user.id)
+        .single();
+
+      // Generate program ID
+      const { data: programIdData } = await supabase.rpc('generate_pdp_program_id', {
+        p_provider_id: user.id,
+      });
+
+      const { competency_ids, ...programData } = dto;
+
+      const { data, error } = await supabase
+        .from('pdp_programs')
+        .insert({
+          ...programData,
+          provider_id: user.id,
+          provider_name: userData?.company_name || 'Unknown Provider',
+          program_id: programIdData || `PDC-${Date.now()}`,
+          created_by: user.id,
+          status: 'draft',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Add competencies if provided
+      if (competency_ids && competency_ids.length > 0) {
+        await supabase.from('pdp_program_competencies').insert(
+          competency_ids.map((c) => ({
+            program_id: data.id,
+            competency_id: c.id,
+            relevance_level: c.level,
+          }))
+        );
+      }
+
+      return { data: data as PDPProgram, error: null };
+    } catch (error) {
+      console.error('Error creating program:', error);
+      return { data: null, error: error as Error };
+    }
+  }
+
+  static async updateProgram(id: string, dto: UpdateProgramDTO): Promise<ServiceResult<PDPProgram>> {
+    try {
+      const { competency_ids, ...programData } = dto;
+
+      const { data, error } = await supabase
+        .from('pdp_programs')
+        .update(programData)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Update competencies if provided
+      if (competency_ids) {
+        // Delete existing
+        await supabase.from('pdp_program_competencies').delete().eq('program_id', id);
+
+        // Add new ones
+        if (competency_ids.length > 0) {
+          await supabase.from('pdp_program_competencies').insert(
+            competency_ids.map((c) => ({
+              program_id: id,
+              competency_id: c.id,
+              relevance_level: c.level,
+            }))
+          );
+        }
+      }
+
+      return { data: data as PDPProgram, error: null };
+    } catch (error) {
+      console.error('Error updating program:', error);
+      return { data: null, error: error as Error };
+    }
+  }
+
+  static async submitProgramForReview(id: string): Promise<ServiceResult<PDPProgram>> {
+    return this.updateProgram(id, { status: 'submitted' });
+  }
+
+  static async deleteProgram(id: string): Promise<ServiceResult<void>> {
+    try {
+      const { error } = await supabase.from('pdp_programs').delete().eq('id', id);
+      if (error) throw error;
+      return { data: null, error: null };
+    } catch (error) {
+      console.error('Error deleting program:', error);
+      return { data: null, error: error as Error };
+    }
+  }
+
+  // ==========================================================================
+  // Annual Reports
+  // ==========================================================================
+
+  static async getAnnualReports(): Promise<ServiceResult<AnnualReport[]>> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase
+        .from('pdp_annual_reports')
+        .select('*')
+        .eq('partner_id', user.id)
+        .order('report_year', { ascending: false });
+
+      if (error) throw error;
+      return { data: data as AnnualReport[], error: null };
+    } catch (error) {
+      console.error('Error fetching annual reports:', error);
+      return { data: null, error: error as Error };
+    }
+  }
+
+  static async createAnnualReport(dto: CreateReportDTO): Promise<ServiceResult<AnnualReport>> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // Get stats for the report year
+      const { data: programs } = await supabase
+        .from('pdp_programs')
+        .select('id')
+        .eq('provider_id', user.id);
+
+      const programIds = programs?.map((p) => p.id) || [];
+      let enrollmentCount = 0;
+      let completionCount = 0;
+      let pdcCredits = 0;
+
+      if (programIds.length > 0) {
+        const { data: enrollments } = await supabase
+          .from('pdp_program_enrollments')
+          .select('status, pdc_credits_earned')
+          .in('program_id', programIds);
+
+        enrollmentCount = enrollments?.length || 0;
+        completionCount = enrollments?.filter((e) => e.status === 'completed').length || 0;
+        pdcCredits = enrollments?.reduce((sum, e) => sum + (e.pdc_credits_earned || 0), 0) || 0;
+      }
+
+      const { data, error } = await supabase
+        .from('pdp_annual_reports')
+        .insert({
+          ...dto,
+          partner_id: user.id,
+          total_programs: programs?.length || 0,
+          total_enrollments: enrollmentCount,
+          total_completions: completionCount,
+          total_pdc_credits_issued: pdcCredits,
+          completion_rate: enrollmentCount > 0 ? (completionCount / enrollmentCount) * 100 : null,
+          status: 'draft',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return { data: data as AnnualReport, error: null };
+    } catch (error) {
+      console.error('Error creating annual report:', error);
+      return { data: null, error: error as Error };
+    }
+  }
+
+  static async updateAnnualReport(id: string, dto: UpdateReportDTO): Promise<ServiceResult<AnnualReport>> {
+    try {
+      const updateData: any = { ...dto };
+      if (dto.status === 'submitted') {
+        updateData.submitted_at = new Date().toISOString();
+      }
+
+      const { data, error } = await supabase
+        .from('pdp_annual_reports')
+        .update(updateData)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return { data: data as AnnualReport, error: null };
+    } catch (error) {
+      console.error('Error updating annual report:', error);
+      return { data: null, error: error as Error };
+    }
+  }
+
+  // ==========================================================================
+  // License Management
+  // ==========================================================================
+
+  static async getLicenseInfo(): Promise<ServiceResult<PDPLicenseInfo>> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase.rpc('get_pdp_license_info', {
+        p_partner_id: user.id,
+      });
+
+      if (error) throw error;
+      return { data: data as PDPLicenseInfo, error: null };
+    } catch (error) {
+      console.error('Error fetching PDP license info:', error);
+      return { data: null, error: error as Error };
+    }
+  }
+
+  static async getProgramSlotStatus(): Promise<ServiceResult<ProgramSlotStatus>> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase.rpc('can_pdp_submit_program', {
+        p_partner_id: user.id,
+      });
+
+      if (error) throw error;
+      return { data: data as ProgramSlotStatus, error: null };
+    } catch (error) {
+      console.error('Error checking program slot status:', error);
+      return { data: null, error: error as Error };
+    }
+  }
+
+  static async submitLicenseRequest(dto: CreateLicenseRequestDTO): Promise<ServiceResult<PDPLicenseRequest>> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // Get license ID
+      const { data: license } = await supabase
+        .from('pdp_licenses')
+        .select('id, max_programs')
+        .eq('partner_id', user.id)
+        .single();
+
+      if (!license) throw new Error('No license found');
+
+      const { data, error } = await supabase
+        .from('pdp_license_requests')
+        .insert({
+          license_id: license.id,
+          partner_id: user.id,
+          request_type: dto.request_type,
+          requested_slots: dto.requested_slots,
+          current_slots: license.max_programs,
+          justification: dto.justification,
+          status: 'pending',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Update renewal_requested flag if it's a renewal
+      if (dto.request_type === 'renewal') {
+        await supabase
+          .from('pdp_licenses')
+          .update({
+            renewal_requested: true,
+            renewal_requested_at: new Date().toISOString(),
+          })
+          .eq('id', license.id);
+      }
+
+      return { data: data as PDPLicenseRequest, error: null };
+    } catch (error) {
+      console.error('Error submitting license request:', error);
+      return { data: null, error: error as Error };
+    }
+  }
+
+  static async cancelLicenseRequest(requestId: string): Promise<ServiceResult<void>> {
+    try {
+      const { error } = await supabase
+        .from('pdp_license_requests')
+        .update({ status: 'cancelled' })
+        .eq('id', requestId)
+        .eq('status', 'pending');
+
+      if (error) throw error;
+      return { data: null, error: null };
+    } catch (error) {
+      console.error('Error cancelling license request:', error);
+      return { data: null, error: error as Error };
+    }
+  }
+
+  // ==========================================================================
+  // Toolkit
+  // ==========================================================================
+
+  static async getToolkitItems(category?: ToolkitCategory): Promise<ServiceResult<PDPToolkitItem[]>> {
+    try {
+      let query = supabase
+        .from('pdp_toolkit_items')
+        .select('*')
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true });
+
+      if (category) {
+        query = query.eq('category', category);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return { data: data as PDPToolkitItem[], error: null };
+    } catch (error) {
+      console.error('Error fetching toolkit items:', error);
+      return { data: null, error: error as Error };
+    }
+  }
+
+  // ==========================================================================
+  // Partner Profile
+  // ==========================================================================
+
+  static async getPartnerProfile(): Promise<ServiceResult<PDPPartnerProfile>> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // Use the database function that auto-creates profile if missing
+      const { data, error } = await supabase.rpc('get_pdp_partner_profile', {
+        p_partner_id: user.id,
+      });
+
+      if (error) throw error;
+      return { data: data as PDPPartnerProfile, error: null };
+    } catch (error) {
+      console.error('Error fetching partner profile:', error);
+      return { data: null, error: error as Error };
+    }
+  }
+
+  static async updatePartnerProfile(dto: UpdatePDPPartnerProfileDTO): Promise<ServiceResult<PDPPartnerProfile>> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // Ensure profile exists first
+      await supabase.rpc('get_pdp_partner_profile', {
+        p_partner_id: user.id,
+      });
+
+      const { data, error } = await supabase
+        .from('pdp_partner_profiles')
+        .update(dto)
+        .eq('partner_id', user.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return { data: data as PDPPartnerProfile, error: null };
+    } catch (error) {
+      console.error('Error updating partner profile:', error);
+      return { data: null, error: error as Error };
+    }
+  }
+
+  static async uploadPartnerLogo(file: File): Promise<ServiceResult<string>> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}/logo.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('partner-logos')
+        .upload(fileName, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('partner-logos')
+        .getPublicUrl(fileName);
+
+      // Update profile with logo URL
+      await supabase
+        .from('pdp_partner_profiles')
+        .update({ logo_url: publicUrl })
+        .eq('partner_id', user.id);
+
+      return { data: publicUrl, error: null };
+    } catch (error) {
+      console.error('Error uploading partner logo:', error);
+      return { data: null, error: error as Error };
+    }
+  }
+
+  // ==========================================================================
+  // Guidelines / Downloadable Resources
+  // ==========================================================================
+
+  static async getGuidelines(category?: GuidelineCategory): Promise<ServiceResult<PDPGuideline[]>> {
+    try {
+      let query = supabase
+        .from('pdp_guidelines')
+        .select('*')
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true });
+
+      if (category) {
+        query = query.eq('category', category);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return { data: data as PDPGuideline[], error: null };
+    } catch (error) {
+      console.error('Error fetching guidelines:', error);
+      return { data: null, error: error as Error };
+    }
+  }
+
+  static async trackGuidelineDownload(guidelineId: string): Promise<ServiceResult<void>> {
+    try {
+      const { error } = await supabase.rpc('increment_guideline_download', {
+        p_guideline_id: guidelineId,
+      });
+
+      if (error) throw error;
+      return { data: null, error: null };
+    } catch (error) {
+      console.error('Error tracking download:', error);
+      return { data: null, error: error as Error };
+    }
+  }
+
+  // Admin methods for managing guidelines
+  static async getAllGuidelines(): Promise<ServiceResult<PDPGuideline[]>> {
+    try {
+      const { data, error } = await supabase
+        .from('pdp_guidelines')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return { data: data as PDPGuideline[], error: null };
+    } catch (error) {
+      console.error('Error fetching all guidelines:', error);
+      return { data: null, error: error as Error };
+    }
+  }
+
+  static async createGuideline(dto: CreatePDPGuidelineDTO): Promise<ServiceResult<PDPGuideline>> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase
+        .from('pdp_guidelines')
+        .insert({
+          ...dto,
+          last_updated_by: user.id,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return { data: data as PDPGuideline, error: null };
+    } catch (error) {
+      console.error('Error creating guideline:', error);
+      return { data: null, error: error as Error };
+    }
+  }
+
+  static async updateGuideline(id: string, dto: UpdatePDPGuidelineDTO): Promise<ServiceResult<PDPGuideline>> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase
+        .from('pdp_guidelines')
+        .update({
+          ...dto,
+          last_updated_by: user.id,
+        })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return { data: data as PDPGuideline, error: null };
+    } catch (error) {
+      console.error('Error updating guideline:', error);
+      return { data: null, error: error as Error };
+    }
+  }
+
+  static async deleteGuideline(id: string): Promise<ServiceResult<void>> {
+    try {
+      const { error } = await supabase
+        .from('pdp_guidelines')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      return { data: null, error: null };
+    } catch (error) {
+      console.error('Error deleting guideline:', error);
+      return { data: null, error: error as Error };
+    }
+  }
+
+  static async uploadGuidelineFile(file: File, category: GuidelineCategory): Promise<ServiceResult<{ url: string; fileName: string; fileSize: number }>> {
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${category}/${Date.now()}_${file.name}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('pdp-guidelines')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('pdp-guidelines')
+        .getPublicUrl(fileName);
+
+      return {
+        data: {
+          url: publicUrl,
+          fileName: file.name,
+          fileSize: file.size,
+        },
+        error: null,
+      };
+    } catch (error) {
+      console.error('Error uploading guideline file:', error);
+      return { data: null, error: error as Error };
+    }
+  }
+}
+
+// =============================================================================
+// Legacy Service for backward compatibility
+// =============================================================================
+
+export class PdpProgramsService {
+  /**
+   * Get all active PDP programs with optional filters
+   */
+  static async getActivePdpPrograms(
+    filters?: PdpProgramFilters
+  ): Promise<PdpProgramResult<PdpProgram[]>> {
+    try {
+      let query = supabase
+        .from('pdp_programs')
+        .select('*')
+        .eq('is_active', filters?.is_active ?? true)
+        .order('program_name', { ascending: true });
+
+      // Apply filters
+      if (filters?.activity_type) {
+        query = query.eq('activity_type', filters.activity_type);
+      }
+
+      if (filters?.bock_domain) {
+        query = query.contains('bock_domain', [filters.bock_domain]);
+      }
+
+      if (filters?.search) {
+        query = query.or(
+          `program_name.ilike.%${filters.search}%,provider_name.ilike.%${filters.search}%,program_id.ilike.%${filters.search}%`
+        );
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+      return { data: data as PdpProgram[], error: null };
+    } catch (error) {
+      console.error('Error fetching PDP programs:', error);
+      return { data: null, error: error as Error };
+    }
+  }
+
+  /**
+   * Get single PDP program by ID
+   */
+  static async getPdpProgramById(id: string): Promise<PdpProgramResult<PdpProgram>> {
+    try {
+      const { data, error } = await supabase
+        .from('pdp_programs')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error) throw error;
+      return { data: data as PdpProgram, error: null };
+    } catch (error) {
+      console.error('Error fetching PDP program:', error);
+      return { data: null, error: error as Error };
+    }
+  }
+
+  /**
+   * Get PDP program by program_id
+   */
+  static async getPdpProgramByProgramId(
+    programId: string
+  ): Promise<PdpProgramResult<PdpProgram>> {
+    try {
+      const { data, error } = await supabase
+        .from('pdp_programs')
+        .select('*')
+        .eq('program_id', programId)
+        .single();
+
+      if (error) throw error;
+      return { data: data as PdpProgram, error: null };
+    } catch (error) {
+      console.error('Error fetching PDP program:', error);
+      return { data: null, error: error as Error };
+    }
+  }
+
+  /**
+   * Get PDP program statistics
+   */
+  static async getPdpProgramStats(): Promise<PdpProgramResult<PdpProgramStats>> {
+    try {
+      const { data: programs, error } = await supabase
+        .from('pdp_programs')
+        .select('*');
+
+      if (error) throw error;
+
+      const activePrograms = programs.filter((p) => p.is_active);
+
+      // Count unique providers
+      const uniqueProviders = new Set(programs.map((p) => p.provider_name));
+
+      // Count programs by type
+      const programsByType = programs.reduce((acc, program) => {
+        const type = program.activity_type;
+        acc[type] = (acc[type] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+
+      const stats: PdpProgramStats = {
+        total_programs: programs.length,
+        active_programs: activePrograms.length,
+        programs_by_type: programsByType as any,
+        total_providers: uniqueProviders.size,
+      };
+
+      return { data: stats, error: null };
+    } catch (error) {
+      console.error('Error fetching PDP program stats:', error);
+      return { data: null, error: error as Error };
+    }
+  }
+
+  /**
+   * Check if a program is currently valid
+   */
+  static isProgramValid(program: PdpProgram): boolean {
+    const now = new Date();
+    const validFrom = new Date(program.valid_from);
+    const validUntil = new Date(program.valid_until);
+
+    return program.is_active && now >= validFrom && now <= validUntil;
+  }
+
+  /**
+   * Get days until program expires
+   */
+  static getDaysUntilExpiry(program: PdpProgram): number {
+    const now = new Date();
+    const validUntil = new Date(program.valid_until);
+    const diffTime = validUntil.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  }
+}

@@ -1,0 +1,184 @@
+import {
+  LayoutDashboard,
+  BookOpen,
+  GraduationCap,
+  ClipboardCheck,
+  Award,
+  Clock,
+  Building2,
+  FolderOpen,
+  ShieldCheck,
+  HelpCircle,
+  ExternalLink,
+  LogOut,
+  Users,
+  Ticket,
+  Calendar,
+  UserCheck,
+  BarChart3,
+  FileText,
+  Palette,
+  PlusCircle,
+  Edit,
+  Upload,
+  MessageCircle,
+  CheckSquare,
+  DollarSign,
+  CreditCard,
+  Mail,
+  Settings,
+  Shield,
+  Package,
+  ShoppingCart,
+  BookMarked,
+  List,
+  UserCog,
+  FileCheck,
+  FileQuestion,
+  Layers,
+  CircleHelp,
+  Crown
+} from 'lucide-react';
+import { NavigationConfig } from '@/types/navigation';
+
+export const navigationConfig: NavigationConfig = {
+  // Individual User Navigation
+  individual: [
+    { id: 'dashboard', label: 'nav.individual.dashboard', path: '/individual/dashboard', icon: LayoutDashboard },
+    { id: 'learning-system', label: 'nav.individual.learningSystem', path: '/learning-system', icon: BookMarked },
+    { id: 'my-books', label: 'nav.individual.myBooks', path: '/my-books', icon: BookOpen },
+    { id: 'certification-exams', label: 'nav.individual.certificationExams', path: '/certification-exams', icon: FileCheck },
+    { id: 'mock-exams', label: 'nav.individual.mockExams', path: '/mock-exams', icon: ClipboardCheck },
+    { id: 'my-certifications', label: 'nav.individual.myCertifications', path: '/my-certifications', icon: Award },
+    { id: 'my-membership', label: 'nav.individual.myMembership', path: '/my-membership', icon: Crown },
+    { id: 'pdcs', label: 'nav.individual.pdcs', path: '/pdcs', icon: Clock },
+    { id: 'authorized-providers', label: 'nav.individual.authorizedProviders', path: '/authorized-providers', icon: Building2 },
+    { id: 'resources', label: 'nav.individual.resources', path: '/resources', icon: FolderOpen },
+    { id: 'my-tickets', label: 'nav.individual.myTickets', path: '/support/my-tickets', icon: MessageCircle },
+    { id: 'help-center', label: 'nav.individual.helpCenter', path: '/help-center', icon: HelpCircle },
+    { id: 'return-website', label: 'nav.individual.returnWebsite', path: 'https://bda-global.org', icon: ExternalLink, external: true },
+    { id: 'sign-out', label: 'nav.individual.signOut', icon: LogOut, action: 'logout' }
+  ],
+
+  // ECP Partner Navigation
+  ecp: [
+    { id: 'dashboard', label: 'nav.ecp.dashboard', path: '/ecp/dashboard', icon: LayoutDashboard },
+    { id: 'candidates', label: 'nav.ecp.candidates', path: '/ecp/candidates', icon: Users },
+    { id: 'vouchers', label: 'nav.ecp.vouchers', path: '/ecp/vouchers', icon: Ticket },
+    { id: 'trainings', label: 'nav.ecp.trainings', path: '/ecp/trainings', icon: Calendar },
+    { id: 'trainers', label: 'nav.ecp.trainers', path: '/ecp/trainers', icon: UserCheck },
+    { id: 'reports', label: 'nav.ecp.reports', path: '/ecp/reports', icon: BarChart3 },
+    { id: 'license', label: 'nav.ecp.license', path: '/ecp/license', icon: FileText },
+    { id: 'toolkit', label: 'nav.ecp.toolkit', path: '/ecp/toolkit', icon: Palette },
+    { id: 'help', label: 'nav.ecp.help', path: '/ecp/help', icon: HelpCircle },
+    { id: 'sign-out', label: 'nav.ecp.signOut', icon: LogOut, action: 'logout' }
+  ],
+
+  // PDP Partner Navigation
+  pdp: [
+    { id: 'dashboard', label: 'nav.pdp.dashboard', path: '/pdp/dashboard', icon: LayoutDashboard },
+    { id: 'programs', label: 'nav.pdp.programs', path: '/pdp/programs', icon: BookOpen },
+    { id: 'profile', label: 'nav.pdp.profile', path: '/pdp/profile', icon: Edit },
+    { id: 'guidelines', label: 'nav.pdp.guidelines', path: '/pdp/guidelines', icon: FileText },
+    { id: 'annual-report', label: 'nav.pdp.annualReport', path: '/pdp/annual-report', icon: Upload },
+    { id: 'support', label: 'nav.pdp.support', path: '/pdp/support', icon: MessageCircle },
+    { id: 'sign-out', label: 'nav.pdp.signOut', icon: LogOut, action: 'logout' }
+  ],
+
+  // Admin Navigation
+  admin: [
+    // Overview
+    { id: 'dashboard', label: 'nav.admin.dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
+
+    // User Management Section
+    { id: 'users', label: 'nav.admin.users', path: '/admin/users', icon: Users, section: 'nav.admin.section.usersPartners' },
+    { id: 'memberships', label: 'nav.admin.memberships', path: '/admin/memberships', icon: Crown },
+    { id: 'partners', label: 'nav.admin.partners', path: '/admin/partners', icon: Building2 },
+    { id: 'ecp-management', label: 'nav.admin.ecpManagement', path: '/admin/ecp-management', icon: Award },
+    { id: 'training-batches', label: 'nav.admin.trainingBatches', path: '/admin/training-batches', icon: Calendar },
+    { id: 'pdp-management', label: 'nav.admin.pdpManagement', path: '/admin/pdp-management', icon: GraduationCap },
+    { id: 'pdp-programs', label: 'nav.admin.pdpPrograms', path: '/admin/pdp-programs', icon: BookOpen },
+    { id: 'pdp-guidelines', label: 'nav.admin.pdpGuidelines', path: '/admin/pdp-guidelines', icon: FileText },
+    { id: 'pdp-reports', label: 'nav.admin.pdpReports', path: '/admin/pdp-reports', icon: BarChart3 },
+
+    // Exams Section
+    { id: 'certification-exams', label: 'nav.admin.certificationExams', path: '/admin/certification-exams', icon: FileCheck, section: 'nav.admin.section.examinations' },
+    { id: 'exam-scheduling', label: 'nav.admin.examScheduling', path: '/admin/exam-scheduling', icon: Calendar },
+    { id: 'certifications', label: 'nav.admin.certifications', path: '/admin/certifications', icon: Award },
+    { id: 'exams', label: 'nav.admin.mockExams', path: '/admin/exams', icon: ClipboardCheck },
+
+    // Learning System Section
+    { id: 'curriculum', label: 'nav.admin.modules', path: '/admin/curriculum', icon: BookMarked, section: 'nav.admin.section.learningSystem' },
+    { id: 'curriculum-lessons', label: 'nav.admin.lessons', path: '/admin/curriculum/lessons', icon: List },
+    { id: 'curriculum-quizzes', label: 'nav.admin.validationQuizzes', path: '/admin/curriculum/quizzes', icon: FileQuestion },
+    { id: 'question-bank', label: 'nav.admin.questionBank', path: '/admin/question-bank', icon: CircleHelp },
+    { id: 'flashcards', label: 'nav.admin.flashcards', path: '/admin/flashcards', icon: Layers },
+    { id: 'curriculum-access', label: 'nav.admin.curriculumAccess', path: '/admin/curriculum/access', icon: UserCog },
+
+    // Products & Sales Section
+    { id: 'certification-products', label: 'nav.admin.certificationProducts', path: '/admin/certification-products', icon: Package, section: 'nav.admin.section.productsSales' },
+    { id: 'customers-vouchers', label: 'nav.admin.customersVouchers', path: '/admin/customers-vouchers', icon: Users },
+    { id: 'vouchers', label: 'nav.admin.allVouchers', path: '/admin/vouchers', icon: Ticket },
+
+    // Operations Section
+    { id: 'support', label: 'nav.admin.supportTickets', path: '/admin/support', icon: MessageCircle, section: 'nav.admin.section.operations' },
+    { id: 'pdcs', label: 'nav.admin.pdcValidation', path: '/admin/pdcs', icon: CheckSquare },
+    { id: 'content', label: 'nav.admin.contentResources', path: '/admin/content', icon: FolderOpen },
+    { id: 'finance', label: 'nav.admin.financeTransactions', path: '/admin/finance', icon: CreditCard },
+    { id: 'communications', label: 'nav.admin.communications', path: '/admin/communications', icon: Mail },
+    { id: 'reports', label: 'nav.admin.reportsAnalytics', path: '/admin/reports', icon: BarChart3 },
+
+    // Sign Out
+    { id: 'sign-out', label: 'nav.admin.signOut', icon: LogOut, action: 'logout' }
+  ],
+
+  // Super Admin Navigation (same as admin with full access)
+  super_admin: [
+    // Overview
+    { id: 'dashboard', label: 'nav.admin.dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
+
+    // Admin Management (Super Admin Only)
+    { id: 'admin-management', label: 'nav.admin.adminManagement', path: '/admin/admins', icon: Shield, section: 'nav.admin.section.system' },
+
+    // User Management Section
+    { id: 'users', label: 'nav.admin.users', path: '/admin/users', icon: Users, section: 'nav.admin.section.usersPartners' },
+    { id: 'memberships', label: 'nav.admin.memberships', path: '/admin/memberships', icon: Crown },
+    { id: 'partners', label: 'nav.admin.partners', path: '/admin/partners', icon: Building2 },
+    { id: 'ecp-management', label: 'nav.admin.ecpManagement', path: '/admin/ecp-management', icon: Award },
+    { id: 'training-batches', label: 'nav.admin.trainingBatches', path: '/admin/training-batches', icon: Calendar },
+    { id: 'pdp-management', label: 'nav.admin.pdpManagement', path: '/admin/pdp-management', icon: GraduationCap },
+    { id: 'pdp-programs', label: 'nav.admin.pdpPrograms', path: '/admin/pdp-programs', icon: BookOpen },
+    { id: 'pdp-guidelines', label: 'nav.admin.pdpGuidelines', path: '/admin/pdp-guidelines', icon: FileText },
+    { id: 'pdp-reports', label: 'nav.admin.pdpReports', path: '/admin/pdp-reports', icon: BarChart3 },
+
+    // Exams Section
+    { id: 'certification-exams', label: 'nav.admin.certificationExams', path: '/admin/certification-exams', icon: FileCheck, section: 'nav.admin.section.examinations' },
+    { id: 'exam-scheduling', label: 'nav.admin.examScheduling', path: '/admin/exam-scheduling', icon: Calendar },
+    { id: 'certifications', label: 'nav.admin.certifications', path: '/admin/certifications', icon: Award },
+    { id: 'exams', label: 'nav.admin.mockExams', path: '/admin/exams', icon: ClipboardCheck },
+
+    // Learning System Section
+    { id: 'curriculum', label: 'nav.admin.modules', path: '/admin/curriculum', icon: BookMarked, section: 'nav.admin.section.learningSystem' },
+    { id: 'curriculum-lessons', label: 'nav.admin.lessons', path: '/admin/curriculum/lessons', icon: List },
+    { id: 'curriculum-quizzes', label: 'nav.admin.validationQuizzes', path: '/admin/curriculum/quizzes', icon: FileQuestion },
+    { id: 'question-bank', label: 'nav.admin.questionBank', path: '/admin/question-bank', icon: CircleHelp },
+    { id: 'flashcards', label: 'nav.admin.flashcards', path: '/admin/flashcards', icon: Layers },
+    { id: 'curriculum-access', label: 'nav.admin.curriculumAccess', path: '/admin/curriculum/access', icon: UserCog },
+
+    // Products & Sales Section
+    { id: 'certification-products', label: 'nav.admin.certificationProducts', path: '/admin/certification-products', icon: Package, section: 'nav.admin.section.productsSales' },
+    { id: 'customers-vouchers', label: 'nav.admin.customersVouchers', path: '/admin/customers-vouchers', icon: Users },
+    { id: 'vouchers', label: 'nav.admin.allVouchers', path: '/admin/vouchers', icon: Ticket },
+
+    // Operations Section
+    { id: 'support', label: 'nav.admin.supportTickets', path: '/admin/support', icon: MessageCircle, section: 'nav.admin.section.operations' },
+    { id: 'pdcs', label: 'nav.admin.pdcValidation', path: '/admin/pdcs', icon: CheckSquare },
+    { id: 'content', label: 'nav.admin.contentResources', path: '/admin/content', icon: FolderOpen },
+    { id: 'finance', label: 'nav.admin.financeTransactions', path: '/admin/finance', icon: CreditCard },
+    { id: 'communications', label: 'nav.admin.communications', path: '/admin/communications', icon: Mail },
+    { id: 'reports', label: 'nav.admin.reportsAnalytics', path: '/admin/reports', icon: BarChart3 },
+
+    // Sign Out
+    { id: 'sign-out', label: 'nav.admin.signOut', icon: LogOut, action: 'logout' }
+  ]
+};

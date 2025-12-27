@@ -1,0 +1,375 @@
+-- Migration: Create Resources & Content Management System
+-- Date: 2025-10-02
+-- Description: Tables for resources, curriculum, and content management
+
+-- =============================================================================
+-- TYPES ENUM
+-- =============================================================================
+
+CREATE TYPE resource_type AS ENUM (
+  'document',
+  'video',
+  'template',
+  'guide',
+  'audio',
+  'interactive'
+);
+
+CREATE TYPE resource_visibility AS ENUM (
+  'public',           -- Tous les utilisateurs authentifiés
+  'certification',    -- Selon type de certification (CP/SCP)
+  'purchased',        -- Basé sur achat de curriculum
+  'admin_only'        -- Admins seulement
+);
+
+CREATE TYPE resource_status AS ENUM ('draft', 'published', 'archived');
+
+-- =============================================================================
+-- TABLE: resources
+-- Métadata des ressources (fichiers dans Supabase Storage)
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS public.resources (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  -- Basic info
+  title TEXT NOT NULL,
+  title_ar TEXT,
+  description TEXT,
+  description_ar TEXT,
+
+  -- File info
+  file_path TEXT NOT NULL, -- Path in Supabase Storage bucket
+  file_size BIGINT, -- Size in bytes
+  file_type TEXT, -- MIME type
+  thumbnail_path TEXT, -- Optional thumbnail
+
+  -- Classification
+  resource_type resource_type NOT NULL,
+  certification_type certification_type, -- NULL = General
+  category TEXT, -- 'bock', 'exam_prep', 'templates', etc.
+  tags TEXT[], -- Searchable tags
+
+  -- Visibility & Access
+  visibility resource_visibility NOT NULL DEFAULT 'public',
+  requires_certification BOOLEAN DEFAULT false,
+  requires_purchase BOOLEAN DEFAULT false,
+  woocommerce_product_id INTEGER, -- Link to store product if purchased
+
+  -- Status
+  status resource_status NOT NULL DEFAULT 'draft',
+  is_featured BOOLEAN DEFAULT false,
+
+  -- Metadata
+  version TEXT DEFAULT '1.0',
+  language TEXT DEFAULT 'en', -- 'en', 'ar', 'both'
+  download_count INTEGER DEFAULT 0,
+
+  -- Audit
+  uploaded_by UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  published_at TIMESTAMPTZ,
+
+  -- Constraints
+  CONSTRAINT valid_file_size CHECK (file_size > 0)
+);
+
+-- Indexes
+CREATE INDEX idx_resources_type ON public.resources(resource_type);
+CREATE INDEX idx_resources_cert_type ON public.resources(certification_type);
+CREATE INDEX idx_resources_visibility ON public.resources(visibility);
+CREATE INDEX idx_resources_status ON public.resources(status);
+CREATE INDEX idx_resources_category ON public.resources(category);
+CREATE INDEX idx_resources_tags ON public.resources USING GIN(tags);
+
+-- =============================================================================
+-- TABLE: curriculum_modules
+-- Structure du curriculum par certification
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS public.curriculum_modules (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  -- Module info
+  module_name TEXT NOT NULL,
+  module_name_ar TEXT,
+  description TEXT,
+  description_ar TEXT,
+
+  -- Hierarchy
+  certification_type certification_type NOT NULL,
+  module_number INTEGER NOT NULL, -- Order in curriculum
+  parent_module_id UUID REFERENCES public.curriculum_modules(id) ON DELETE SET NULL,
+
+  -- Learning objectives
+  learning_objectives TEXT[],
+  learning_objectives_ar TEXT[],
+
+  -- BoCK alignment
+  bock_domains TEXT[],
+
+  -- Resources
+  resource_ids UUID[], -- Links to resources table
+
+  -- Status
+  is_active BOOLEAN DEFAULT true,
+
+  -- Audit
+  created_by UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+  -- Constraints
+  CONSTRAINT unique_module_number UNIQUE (certification_type, module_number)
+);
+
+-- Indexes
+CREATE INDEX idx_curriculum_cert_type ON public.curriculum_modules(certification_type);
+CREATE INDEX idx_curriculum_module_num ON public.curriculum_modules(module_number);
+CREATE INDEX idx_curriculum_parent ON public.curriculum_modules(parent_module_id);
+
+-- =============================================================================
+-- TABLE: resource_access_log
+-- Track resource downloads/views
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS public.resource_access_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  resource_id UUID NOT NULL REFERENCES public.resources(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+
+  action TEXT NOT NULL, -- 'view', 'download'
+  accessed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+  -- Metadata
+  ip_address INET,
+  user_agent TEXT
+);
+
+-- Indexes
+CREATE INDEX idx_access_log_resource ON public.resource_access_log(resource_id);
+CREATE INDEX idx_access_log_user ON public.resource_access_log(user_id);
+CREATE INDEX idx_access_log_time ON public.resource_access_log(accessed_at);
+
+-- =============================================================================
+-- STORAGE BUCKETS (Supabase Storage)
+-- =============================================================================
+
+-- Create storage bucket for resources (execute via Supabase Dashboard or API)
+-- Bucket name: 'resources'
+-- Public: false (controlled by RLS)
+
+-- =============================================================================
+-- TRIGGERS
+-- =============================================================================
+
+-- Trigger for updated_at on resources
+CREATE TRIGGER update_resources_updated_at
+  BEFORE UPDATE ON public.resources
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+-- Trigger for updated_at on curriculum_modules
+CREATE TRIGGER update_curriculum_modules_updated_at
+  BEFORE UPDATE ON public.curriculum_modules
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+-- Trigger to increment download count
+CREATE OR REPLACE FUNCTION increment_download_count()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.action = 'download' THEN
+    UPDATE public.resources
+    SET download_count = download_count + 1
+    WHERE id = NEW.resource_id;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER after_resource_download
+  AFTER INSERT ON public.resource_access_log
+  FOR EACH ROW
+  EXECUTE FUNCTION increment_download_count();
+
+-- =============================================================================
+-- ROW LEVEL SECURITY (RLS)
+-- =============================================================================
+
+-- Enable RLS
+ALTER TABLE public.resources ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.curriculum_modules ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.resource_access_log ENABLE ROW LEVEL SECURITY;
+
+-- Policies: resources (SELECT)
+CREATE POLICY "Users see resources based on visibility rules"
+ON public.resources FOR SELECT
+TO authenticated
+USING (
+  status = 'published'
+  AND (
+    -- Public resources
+    visibility = 'public'
+    OR
+    -- Admin can see all
+    EXISTS (
+      SELECT 1 FROM public.users
+      WHERE id = auth.uid()
+      AND role IN ('admin', 'super_admin')
+    )
+    OR
+    -- Certification-based
+    (visibility = 'certification' AND (
+      certification_type IS NULL -- General
+      OR EXISTS (
+        SELECT 1 FROM public.quiz_attempts qa
+        JOIN public.quizzes q ON qa.quiz_id = q.id
+        WHERE qa.user_id = auth.uid()
+        AND qa.passed = true
+        AND q.certification_type::text = resources.certification_type::text
+      )
+    ))
+    OR
+    -- Purchase-based (check WooCommerce orders via user profile)
+    (visibility = 'purchased' AND requires_purchase = true)
+  )
+);
+
+-- Policies: resources (INSERT/UPDATE/DELETE - Admin only)
+CREATE POLICY "Admins can manage all resources"
+ON public.resources FOR ALL
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1 FROM public.users
+    WHERE id = auth.uid()
+    AND role IN ('admin', 'super_admin')
+  )
+);
+
+-- Policies: curriculum_modules
+CREATE POLICY "Users see active curriculum modules"
+ON public.curriculum_modules FOR SELECT
+TO authenticated
+USING (is_active = true);
+
+CREATE POLICY "Admins can manage curriculum modules"
+ON public.curriculum_modules FOR ALL
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1 FROM public.users
+    WHERE id = auth.uid()
+    AND role IN ('admin', 'super_admin')
+  )
+);
+
+-- Policies: resource_access_log
+CREATE POLICY "Users can log their own access"
+ON public.resource_access_log FOR INSERT
+TO authenticated
+WITH CHECK (user_id = auth.uid());
+
+CREATE POLICY "Users see their own access log"
+ON public.resource_access_log FOR SELECT
+TO authenticated
+USING (
+  user_id = auth.uid()
+  OR EXISTS (
+    SELECT 1 FROM public.users
+    WHERE id = auth.uid()
+    AND role IN ('admin', 'super_admin')
+  )
+);
+
+-- =============================================================================
+-- HELPER FUNCTIONS
+-- =============================================================================
+
+/**
+ * Check if user can access a resource
+ */
+CREATE OR REPLACE FUNCTION can_access_resource(
+  p_resource_id UUID,
+  p_user_id UUID
+)
+RETURNS BOOLEAN AS $$
+DECLARE
+  v_resource RECORD;
+BEGIN
+  SELECT * INTO v_resource FROM public.resources WHERE id = p_resource_id;
+
+  IF NOT FOUND OR v_resource.status != 'published' THEN
+    RETURN false;
+  END IF;
+
+  -- Public resources
+  IF v_resource.visibility = 'public' THEN
+    RETURN true;
+  END IF;
+
+  -- Admin users
+  IF EXISTS (
+    SELECT 1 FROM public.users
+    WHERE id = p_user_id AND role IN ('admin', 'super_admin')
+  ) THEN
+    RETURN true;
+  END IF;
+
+  -- Certification-based
+  IF v_resource.visibility = 'certification' THEN
+    RETURN EXISTS (
+      SELECT 1 FROM public.quiz_attempts qa
+      JOIN public.quizzes q ON qa.quiz_id = q.id
+      WHERE qa.user_id = p_user_id
+      AND qa.passed = true
+      AND q.certification_type::text = v_resource.certification_type::text
+    );
+  END IF;
+
+  -- Purchase-based (TODO: implement WooCommerce check)
+  IF v_resource.visibility = 'purchased' THEN
+    RETURN false; -- Implement later
+  END IF;
+
+  RETURN false;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+/**
+ * Get resources for user based on access rights
+ */
+CREATE OR REPLACE FUNCTION get_accessible_resources(p_user_id UUID)
+RETURNS TABLE (
+  id UUID,
+  title TEXT,
+  description TEXT,
+  resource_type resource_type,
+  file_path TEXT
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT r.id, r.title, r.description, r.resource_type, r.file_path
+  FROM public.resources r
+  WHERE r.status = 'published'
+  AND can_access_resource(r.id, p_user_id);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- =============================================================================
+-- COMMENTS
+-- =============================================================================
+
+COMMENT ON TABLE public.resources IS 'Resources and learning materials metadata';
+COMMENT ON TABLE public.curriculum_modules IS 'Curriculum structure by certification';
+COMMENT ON TABLE public.resource_access_log IS 'Resource access tracking';
+COMMENT ON FUNCTION can_access_resource IS 'Check if user can access a specific resource';
+
+-- =============================================================================
+-- VERIFICATION
+-- =============================================================================
+
+SELECT '✅ Resources & Content Management system created successfully!' as status;

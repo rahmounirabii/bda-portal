@@ -28,7 +28,19 @@
     /* Path mapping */
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./client/*"],
+      "@/*": ["./client/src/*"],
+      "@/shared/*": ["./client/src/shared/*"],
+      "@/entities/*": ["./client/src/entities/*"],
+      "@/features/*": ["./client/src/features/*"],
+      "@/widgets/*": ["./client/src/widgets/*"],
+      "@/app/*": ["./client/src/app/*"],
+      "@/components/*": ["./client/components/*"],
+      "@/contexts/*": ["./client/contexts/*"],
+      "@/hooks/*": ["./client/hooks/*"],
+      "@/lib/*": ["./client/lib/*"],
+      "@/config/*": ["./client/config/*"],
+      "@/pages/*": ["./client/pages/*"],
+      "@/types/*": ["./client/types/*"],
       "@shared/*": ["./shared/*"]
     }
   },

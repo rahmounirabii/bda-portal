@@ -1,18 +1,20 @@
 import { defineConfig, Plugin } from "vite";
 import react from "@vitejs/plugin-react-swc";
-import path from "path";
+import { fileURLToPath, URL } from "node:url";
+import tsconfigPaths from "vite-tsconfig-paths";
 import { createServer } from "./server";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
-    port: 8080,
+    port: 8082,
+    sourcemapIgnoreList: false, // Désactiver l'ignore des source maps
   },
   build: {
     outDir: "dist/spa",
     assetsDir: "assets",
-    sourcemap: false,
+    sourcemap: mode === 'development' ? 'inline' : false,
     cssCodeSplit: true,
     rollupOptions: {
       output: {
@@ -56,12 +58,25 @@ export default defineConfig(({ mode }) => ({
     reportCompressedSize: false,
     chunkSizeWarningLimit: 1600,
   },
-  plugins: [react(), expressPlugin()],
+  plugins: [react(), tsconfigPaths(), expressPlugin()],
   resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./client"),
-      "@shared": path.resolve(__dirname, "./shared"),
-    },
+    alias: [
+      { find: '@/components', replacement: fileURLToPath(new URL('./client/components', import.meta.url)) },
+      { find: '@/contexts', replacement: fileURLToPath(new URL('./client/contexts', import.meta.url)) },
+      { find: '@/hooks', replacement: fileURLToPath(new URL('./client/hooks', import.meta.url)) },
+      { find: '@/services', replacement: fileURLToPath(new URL('./client/src/services', import.meta.url)) },
+      { find: '@/lib', replacement: fileURLToPath(new URL('./client/lib', import.meta.url)) },
+      { find: '@/config', replacement: fileURLToPath(new URL('./client/config', import.meta.url)) },
+      { find: '@/pages', replacement: fileURLToPath(new URL('./client/pages', import.meta.url)) },
+      { find: '@/types', replacement: fileURLToPath(new URL('./client/types', import.meta.url)) },
+      { find: '@/app', replacement: fileURLToPath(new URL('./client/src/app', import.meta.url)) },
+      { find: '@/shared', replacement: fileURLToPath(new URL('./client/src/shared', import.meta.url)) },
+      { find: '@/entities', replacement: fileURLToPath(new URL('./client/src/entities', import.meta.url)) },
+      { find: '@/features', replacement: fileURLToPath(new URL('./client/src/features', import.meta.url)) },
+      { find: '@/widgets', replacement: fileURLToPath(new URL('./client/src/widgets', import.meta.url)) },
+      { find: '@shared', replacement: fileURLToPath(new URL('./shared', import.meta.url)) },
+      { find: '@', replacement: fileURLToPath(new URL('./client/src', import.meta.url)) },
+    ],
   },
 }));
 

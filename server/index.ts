@@ -1,6 +1,10 @@
 import express from "express";
 import cors from "cors";
 import { handleDemo } from "./routes/demo";
+import {
+  handleWooCommerceOrderWebhook,
+  handleWebhookHealth,
+} from "./routes/woocommerce-webhook";
 
 export function createServer() {
   const app = express();
@@ -16,6 +20,12 @@ export function createServer() {
   });
 
   app.get("/api/demo", handleDemo);
+
+  // WooCommerce Webhook routes
+  // POST endpoint for WooCommerce order webhooks (membership activation)
+  app.post("/api/webhooks/woocommerce/order", handleWooCommerceOrderWebhook);
+  // Health check for webhook endpoint
+  app.get("/api/webhooks/woocommerce/health", handleWebhookHealth);
 
   return app;
 }

@@ -1,0 +1,136 @@
+-- Migration: Update Visibility Rules to Logical Values (FIXED)
+-- Date: 2025-10-02
+-- Description: Remove "purchased" rule and make rules logical for BDA Portal context
+
+-- First, insert new visibility rules (or update if exist)
+INSERT INTO public.resource_visibility_rules (rule_key, label_en, label_ar, description_en, description_ar) VALUES
+  (
+    'all_members',
+    'All Members',
+    'جميع الأعضاء',
+    'Available to all authenticated members of the portal',
+    'متاح لجميع الأعضاء المصادق عليهم في البوابة'
+  ),
+  (
+    'cp_certified',
+    'CP™ Certified Only',
+    'حاملي شهادة CP™ فقط',
+    'Only available to members who have passed the CP™ certification exam',
+    'متاح فقط للأعضاء الحاصلين على شهادة CP™'
+  ),
+  (
+    'scp_certified',
+    'SCP™ Certified Only',
+    'حاملي شهادة SCP™ فقط',
+    'Only available to members who have passed the SCP™ certification exam',
+    'متاح فقط للأعضاء الحاصلين على شهادة SCP™'
+  ),
+  (
+    'both_certified',
+    'CP™ + SCP™ Certified',
+    'حاملي CP™ و SCP™',
+    'Only for members who hold both CP™ and SCP™ certifications',
+    'متاح فقط للأعضاء الحاصلين على كلتا الشهادتين'
+  ),
+  (
+    'admin_only',
+    'Administrators Only',
+    'للمسؤولين فقط',
+    'Restricted to BDA administrators and staff',
+    'مقصور على مسؤولي وموظفي الجمعية'
+  )
+ON CONFLICT (rule_key) DO UPDATE SET
+  label_en = EXCLUDED.label_en,
+  label_ar = EXCLUDED.label_ar,
+  description_en = EXCLUDED.description_en,
+  description_ar = EXCLUDED.description_ar;
+
+-- Get the ID of 'all_members' rule to use as default
+DO $$
+DECLARE
+  all_members_id UUID;
+BEGIN
+  SELECT id INTO all_members_id FROM public.resource_visibility_rules WHERE rule_key = 'all_members';
+
+  -- Update any resources with old visibility rules to use 'all_members'
+  UPDATE public.resources
+  SET visibility_rule_id = all_members_id
+  WHERE visibility_rule_id NOT IN (
+    SELECT id FROM public.resource_visibility_rules
+    WHERE rule_key IN ('all_members', 'cp_certified', 'scp_certified', 'both_certified', 'admin_only')
+  );
+
+  -- Now safe to delete old rules
+  DELETE FROM public.resource_visibility_rules
+  WHERE rule_key NOT IN ('all_members', 'cp_certified', 'scp_certified', 'both_certified', 'admin_only');
+END $$;
+
+-- Update RLS policy for resources to handle new rules
+DROP POLICY IF EXISTS "Users see published resources based on visibility" ON public.resources;
+
+CREATE POLICY "Users see published resources based on visibility"
+  ON public.resources FOR SELECT
+  TO authenticated USING (
+    status = 'published' AND (
+      -- Admins see all
+      EXISTS (
+        SELECT 1 FROM public.users
+        WHERE id = auth.uid() AND role IN ('admin', 'super_admin')
+      )
+      OR
+      -- Check visibility rule
+      EXISTS (
+        SELECT 1 FROM public.resource_visibility_rules rv
+        WHERE rv.id = resources.visibility_rule_id
+        AND (
+          -- All members
+          rv.rule_key = 'all_members'
+          OR
+          -- CP certified only
+          (rv.rule_key = 'cp_certified' AND EXISTS (
+            SELECT 1 FROM public.quiz_attempts qa
+            JOIN public.quizzes q ON qa.quiz_id = q.id
+            WHERE qa.user_id = auth.uid()
+            AND qa.passed = true
+            AND q.certification_type = 'CP'
+          ))
+          OR
+          -- SCP certified only
+          (rv.rule_key = 'scp_certified' AND EXISTS (
+            SELECT 1 FROM public.quiz_attempts qa
+            JOIN public.quizzes q ON qa.quiz_id = q.id
+            WHERE qa.user_id = auth.uid()
+            AND qa.passed = true
+            AND q.certification_type = 'SCP'
+          ))
+          OR
+          -- Both certifications required
+          (rv.rule_key = 'both_certified' AND
+            EXISTS (
+              SELECT 1 FROM public.quiz_attempts qa
+              JOIN public.quizzes q ON qa.quiz_id = q.id
+              WHERE qa.user_id = auth.uid()
+              AND qa.passed = true
+              AND q.certification_type = 'CP'
+            )
+            AND EXISTS (
+              SELECT 1 FROM public.quiz_attempts qa
+              JOIN public.quizzes q ON qa.quiz_id = q.id
+              WHERE qa.user_id = auth.uid()
+              AND qa.passed = true
+              AND q.certification_type = 'SCP'
+            )
+          )
+          OR
+          -- Admin only (already checked above, but for completeness)
+          (rv.rule_key = 'admin_only' AND EXISTS (
+            SELECT 1 FROM public.users
+            WHERE id = auth.uid() AND role IN ('admin', 'super_admin')
+          ))
+        )
+      )
+    )
+  );
+
+-- Verification
+SELECT '✅ Visibility rules updated to logical values for BDA Portal!' as status;

@@ -1,0 +1,10 @@
+-- Fix ecp_voucher_allocations foreign key to reference partners table instead of users
+
+-- Drop old foreign key
+ALTER TABLE public.ecp_voucher_allocations
+  DROP CONSTRAINT IF EXISTS ecp_voucher_allocations_partner_id_fkey;
+
+-- Add new foreign key referencing partners table
+ALTER TABLE public.ecp_voucher_allocations
+  ADD CONSTRAINT ecp_voucher_allocations_partner_id_fkey
+  FOREIGN KEY (partner_id) REFERENCES public.partners(id) ON DELETE CASCADE;

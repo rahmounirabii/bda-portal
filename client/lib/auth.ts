@@ -1,5 +1,5 @@
 // BDA Portal Authentication System
-// Secure JWT token management with WordPress integration
+// DEVELOPMENT MODE: Authentication disabled for local testing
 
 export interface User {
   id: number;
@@ -29,6 +29,9 @@ class AuthTokenManager {
   private accessToken: string | null = null;
   private refreshPromise: Promise<string> | null = null;
   private tokenExpiry: number | null = null;
+
+  // DEVELOPMENT MODE: Skip real authentication
+  private readonly DEV_MODE = true;
 
   // WordPress JWT API endpoints
   private readonly WP_BASE_URL = 'https://bda-global.org';
@@ -91,6 +94,8 @@ class AuthTokenManager {
   }
 
   isTokenValid(): boolean {
+    // DEVELOPMENT MODE: Always return true
+    if (this.DEV_MODE) return true;
     return this.getAccessToken() !== null;
   }
 
@@ -103,6 +108,25 @@ class AuthTokenManager {
 
   // Authenticate with WordPress
   async login(username: string, password: string): Promise<User> {
+    // DEVELOPMENT MODE: Return mock user without real authentication
+    if (this.DEV_MODE) {
+      const mockUser: User = {
+        id: 1,
+        email: 'developer@bda-global.org',
+        username: 'developer',
+        displayName: 'BDA Developer',
+        roles: ['member', 'developer'],
+      };
+
+      // Store mock token
+      this.setAccessToken('dev-token-123');
+
+      // Store user data in sessionStorage
+      sessionStorage.setItem('bda_user', JSON.stringify(mockUser));
+
+      return mockUser;
+    }
+
     try {
       const response = await fetch(`${this.WP_BASE_URL}${this.TOKEN_ENDPOINT}`, {
         method: 'POST',
@@ -118,15 +142,15 @@ class AuthTokenManager {
 
       if (!response.ok) {
         const error: AuthError = await response.json();
-        
+
         // Decode HTML entities and clean up the error message
         let cleanMessage = error.message || 'Authentication failed';
-        
+
         // Decode HTML entities
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = cleanMessage;
         cleanMessage = tempDiv.textContent || tempDiv.innerText || cleanMessage;
-        
+
         // Extract clean message from WordPress error format
         if (cleanMessage.includes('The username') && cleanMessage.includes('is not registered')) {
           cleanMessage = 'Username not found. Try your email address instead.';
@@ -135,12 +159,12 @@ class AuthTokenManager {
         } else if (cleanMessage.includes('empty username') || cleanMessage.includes('empty password')) {
           cleanMessage = 'Please enter both username and password.';
         }
-        
+
         throw new Error(cleanMessage);
       }
 
       const authData: AuthResponse = await response.json();
-      
+
       // Store token securely in memory
       this.setAccessToken(authData.token);
 
@@ -189,6 +213,9 @@ class AuthTokenManager {
 
   // Validate current token with WordPress
   async validateToken(): Promise<boolean> {
+    // DEVELOPMENT MODE: Always return true
+    if (this.DEV_MODE) return true;
+
     const token = this.getAccessToken();
     if (!token) return false;
 
@@ -211,6 +238,28 @@ class AuthTokenManager {
 
   // Get current user from session
   getCurrentUser(): User | null {
+    // DEVELOPMENT MODE: Return mock user if no user in storage
+    if (this.DEV_MODE) {
+      try {
+        const userData = sessionStorage.getItem('bda_user');
+        if (userData) {
+          return JSON.parse(userData);
+        }
+        // Return mock user for development
+        const mockUser: User = {
+          id: 1,
+          email: 'developer@bda-global.org',
+          username: 'developer',
+          displayName: 'BDA Developer',
+          roles: ['member', 'developer'],
+        };
+        sessionStorage.setItem('bda_user', JSON.stringify(mockUser));
+        return mockUser;
+      } catch {
+        return null;
+      }
+    }
+
     try {
       const userData = sessionStorage.getItem('bda_user');
       return userData ? JSON.parse(userData) : null;

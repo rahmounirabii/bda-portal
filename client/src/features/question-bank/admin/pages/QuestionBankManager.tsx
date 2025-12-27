@@ -1,0 +1,834 @@
+/**
+ * Question Bank Manager - Admin Page
+ * CRUD operations for question sets and questions
+ */
+
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import {
+  useQuestionSetsWithCompetency,
+  useCreateQuestionSet,
+  useUpdateQuestionSet,
+  useDeleteQuestionSet,
+  useAdminQuestionBankStats,
+} from '@/entities/question-bank';
+import {
+  CurriculumService,
+  curriculumKeys,
+  useLessonsByModule,
+} from '@/entities/curriculum';
+import type {
+  QuestionSetWithCompetency,
+  QuestionSetInsert,
+  QuestionSetUpdate,
+} from '@/entities/question-bank';
+import {
+  Plus,
+  Search,
+  Edit,
+  Trash2,
+  Eye,
+  EyeOff,
+  HelpCircle,
+  Filter,
+  MoreHorizontal,
+  FileQuestion,
+  Download,
+  Upload,
+  CheckCircle,
+} from 'lucide-react';
+import { AdminPageHeader, StatCard, AdminFilterCard } from '@/features/curriculum/admin/components/shared';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
+import { toast } from 'sonner';
+import { useLanguage } from '@/contexts/LanguageContext';
+
+export function QuestionBankManager() {
+  const navigate = useNavigate();
+  const { language } = useLanguage();
+
+  const t = {
+    en: {
+      title: 'Question Bank Manager',
+      description: 'Manage question sets and practice questions',
+      import: 'Import',
+      export: 'Export',
+      createQuestionSet: 'Create Question Set',
+      totalQuestions: 'Total Questions',
+      questionSets: 'Question Sets',
+      published: 'Published',
+      unpublished: 'Unpublished',
+      filters: 'Filters',
+      filterDescription: 'Search and filter question sets',
+      searchPlaceholder: 'Search question sets...',
+      section: 'Section',
+      allSections: 'All Sections',
+      introduction: 'Introduction',
+      knowledge: 'Knowledge',
+      behavioral: 'Behavioral',
+      status: 'Status',
+      allStatus: 'All Status',
+      titleColumn: 'Title',
+      competency: 'Competency',
+      questions: 'Questions',
+      actions: 'Actions',
+      draft: 'Draft',
+      manageQuestions: 'Manage Questions',
+      editSet: 'Edit Set',
+      delete: 'Delete',
+      noQuestionSetsFound: 'No question sets found',
+      createSet: 'Create Question Set',
+      editSetTitle: 'Edit Question Set',
+      deleteSetTitle: 'Delete Question Set',
+      deleteConfirmation: 'Are you sure you want to delete "{title}"? This will also delete all questions in this set. This action cannot be undone.',
+      cancel: 'Cancel',
+      sectionType: 'Section Type',
+      orderIndex: 'Order Index',
+      competencyModule: 'Competency (Module)',
+      subCompetency: 'Sub-competency (Lesson)',
+      selectCompetency: 'Select competency (optional)',
+      selectLesson: 'Select lesson (optional)',
+      none: 'None (standalone)',
+      noneOption: 'None',
+      titleEnglish: 'Title (English) *',
+      titleArabic: 'Title (Arabic)',
+      descriptionEnglish: 'Description (English)',
+      timeLimitMinutes: 'Time Limit (minutes)',
+      optional: 'Optional',
+      passingScore: 'Passing Score (%)',
+      finalTest: 'Final Test (40 questions)',
+      update: 'Update',
+      create: 'Create',
+      enterTitle: 'Enter title',
+      enterTitleAr: 'ادخل العنوان',
+      enterDescription: 'Enter description',
+      titleRequired: 'Title is required',
+      createSuccess: 'Question set created successfully',
+      createError: 'Failed to create question set',
+      updateSuccess: 'Question set updated successfully',
+      updateError: 'Failed to update question set',
+      deleteSuccess: 'Question set deleted successfully',
+      deleteError: 'Failed to delete question set',
+      publishSuccess: 'Question set published',
+      unpublishSuccess: 'Question set unpublished',
+      publishError: 'Failed to update publish status',
+    },
+    ar: {
+      title: 'إدارة بنك الأسئلة',
+      description: 'إدارة مجموعات الأسئلة وأسئلة التمرين',
+      import: 'استيراد',
+      export: 'تصدير',
+      createQuestionSet: 'إنشاء مجموعة أسئلة',
+      totalQuestions: 'إجمالي الأسئلة',
+      questionSets: 'مجموعات الأسئلة',
+      published: 'منشور',
+      unpublished: 'غير منشور',
+      filters: 'الفلاتر',
+      filterDescription: 'البحث والتصفية في مجموعات الأسئلة',
+      searchPlaceholder: 'البحث في مجموعات الأسئلة...',
+      section: 'القسم',
+      allSections: 'جميع الأقسام',
+      introduction: 'مقدمة',
+      knowledge: 'معرفة',
+      behavioral: 'سلوكي',
+      status: 'الحالة',
+      allStatus: 'جميع الحالات',
+      titleColumn: 'العنوان',
+      competency: 'الكفاءة',
+      questions: 'الأسئلة',
+      actions: 'الإجراءات',
+      draft: 'مسودة',
+      manageQuestions: 'إدارة الأسئلة',
+      editSet: 'تعديل المجموعة',
+      delete: 'حذف',
+      noQuestionSetsFound: 'لم يتم العثور على مجموعات أسئلة',
+      createSet: 'إنشاء مجموعة أسئلة',
+      editSetTitle: 'تعديل مجموعة الأسئلة',
+      deleteSetTitle: 'حذف مجموعة الأسئلة',
+      deleteConfirmation: 'هل أنت متأكد من حذف "{title}"؟ سيؤدي هذا أيضًا إلى حذف جميع الأسئلة في هذه المجموعة. لا يمكن التراجع عن هذا الإجراء.',
+      cancel: 'إلغاء',
+      sectionType: 'نوع القسم',
+      orderIndex: 'ترتيب العرض',
+      competencyModule: 'الكفاءة (الوحدة)',
+      subCompetency: 'الكفاءة الفرعية (الدرس)',
+      selectCompetency: 'اختر الكفاءة (اختياري)',
+      selectLesson: 'اختر الدرس (اختياري)',
+      none: 'لا شيء (مستقل)',
+      noneOption: 'لا شيء',
+      titleEnglish: 'العنوان (بالإنجليزية) *',
+      titleArabic: 'العنوان (بالعربية)',
+      descriptionEnglish: 'الوصف (بالإنجليزية)',
+      timeLimitMinutes: 'الوقت المحدد (بالدقائق)',
+      optional: 'اختياري',
+      passingScore: 'درجة النجاح (%)',
+      finalTest: 'اختبار نهائي (40 سؤال)',
+      update: 'تحديث',
+      create: 'إنشاء',
+      enterTitle: 'أدخل العنوان',
+      enterTitleAr: 'ادخل العنوان',
+      enterDescription: 'أدخل الوصف',
+      titleRequired: 'العنوان مطلوب',
+      createSuccess: 'تم إنشاء مجموعة الأسئلة بنجاح',
+      createError: 'فشل في إنشاء مجموعة الأسئلة',
+      updateSuccess: 'تم تحديث مجموعة الأسئلة بنجاح',
+      updateError: 'فشل في تحديث مجموعة الأسئلة',
+      deleteSuccess: 'تم حذف مجموعة الأسئلة بنجاح',
+      deleteError: 'فشل في حذف مجموعة الأسئلة',
+      publishSuccess: 'تم نشر مجموعة الأسئلة',
+      unpublishSuccess: 'تم إلغاء نشر مجموعة الأسئلة',
+      publishError: 'فشل في تحديث حالة النشر',
+    }
+  };
+
+  const texts = t[language];
+
+  // State
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sectionFilter, setSectionFilter] = useState<string>('all');
+  const [publishedFilter, setPublishedFilter] = useState<string>('all');
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [editingSet, setEditingSet] = useState<QuestionSetWithCompetency | null>(
+    null
+  );
+  const [deleteConfirmSet, setDeleteConfirmSet] =
+    useState<QuestionSetWithCompetency | null>(null);
+
+  // Data fetching
+  const { data: questionSets, isLoading } = useQuestionSetsWithCompetency({
+    certification_type: 'CP',
+    section_type:
+      sectionFilter !== 'all' ? (sectionFilter as any) : undefined,
+    is_published: publishedFilter === 'all' ? undefined : publishedFilter === 'published',
+  });
+  const { data: stats } = useAdminQuestionBankStats('CP');
+
+  // Mutations
+  const createSet = useCreateQuestionSet();
+  const updateSet = useUpdateQuestionSet();
+  const deleteSet = useDeleteQuestionSet();
+
+  // Filter question sets
+  const filteredSets = questionSets?.filter((set) => {
+    if (searchTerm) {
+      const search = searchTerm.toLowerCase();
+      return (
+        set.title.toLowerCase().includes(search) ||
+        set.title_ar?.toLowerCase().includes(search) ||
+        set.competency?.competency_name.toLowerCase().includes(search)
+      );
+    }
+    return true;
+  });
+
+  // Handle create
+  const handleCreate = async (data: QuestionSetInsert) => {
+    try {
+      await createSet.mutateAsync(data);
+      toast.success(texts.createSuccess);
+      setIsCreateDialogOpen(false);
+    } catch (error) {
+      toast.error(texts.createError);
+    }
+  };
+
+  // Handle update
+  const handleUpdate = async (setId: string, data: QuestionSetUpdate) => {
+    try {
+      await updateSet.mutateAsync({ setId, updates: data });
+      toast.success(texts.updateSuccess);
+      setEditingSet(null);
+    } catch (error) {
+      toast.error(texts.updateError);
+    }
+  };
+
+  // Handle delete
+  const handleDelete = async (setId: string) => {
+    try {
+      await deleteSet.mutateAsync(setId);
+      toast.success(texts.deleteSuccess);
+      setDeleteConfirmSet(null);
+    } catch (error) {
+      toast.error(texts.deleteError);
+    }
+  };
+
+  // Handle toggle publish
+  const handleTogglePublish = async (set: QuestionSetWithCompetency) => {
+    try {
+      await updateSet.mutateAsync({
+        setId: set.id,
+        updates: { is_published: !set.is_published },
+      });
+      toast.success(
+        set.is_published ? texts.unpublishSuccess : texts.publishSuccess
+      );
+    } catch (error) {
+      toast.error(texts.publishError);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container mx-auto px-4 py-8 max-w-7xl">
+      {/* Header */}
+      <AdminPageHeader
+        title={texts.title}
+        description={texts.description}
+        icon={HelpCircle}
+        action={
+          <div className="flex gap-3">
+            <Button variant="outline" className="bg-white text-gray-700 hover:bg-blue-50">
+              <Upload className="w-4 h-4 mr-2" />
+              {texts.import}
+            </Button>
+            <Button variant="outline" className="bg-white text-gray-700 hover:bg-blue-50">
+              <Download className="w-4 h-4 mr-2" />
+              {texts.export}
+            </Button>
+            <Button onClick={() => setIsCreateDialogOpen(true)} className="bg-white text-blue-600 hover:bg-blue-50">
+              <Plus className="w-4 h-4 mr-2" />
+              {texts.createQuestionSet}
+            </Button>
+          </div>
+        }
+      />
+
+      {/* Stats Cards */}
+      {stats && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <StatCard
+            label={texts.totalQuestions}
+            value={stats.totalQuestions}
+            icon={HelpCircle}
+            color="green"
+          />
+          <StatCard
+            label={texts.questionSets}
+            value={stats.totalSets}
+            icon={FileQuestion}
+            color="blue"
+          />
+          <StatCard
+            label={texts.published}
+            value={stats.publishedSets}
+            icon={CheckCircle}
+            color="purple"
+          />
+          <StatCard
+            label={texts.unpublished}
+            value={stats.unpublishedSets}
+            icon={EyeOff}
+            color="gray"
+          />
+        </div>
+      )}
+
+      {/* Filters */}
+      <AdminFilterCard
+        title={texts.filters}
+        description={texts.filterDescription}
+        onReset={() => {
+          setSearchTerm('');
+          setSectionFilter('all');
+          setPublishedFilter('all');
+        }}
+      >
+        <div className="relative md:col-span-3">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Input
+            placeholder={texts.searchPlaceholder}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        <Select value={sectionFilter} onValueChange={setSectionFilter}>
+          <SelectTrigger>
+            <SelectValue placeholder={texts.section} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{texts.allSections}</SelectItem>
+            <SelectItem value="introduction">{texts.introduction}</SelectItem>
+            <SelectItem value="knowledge">{texts.knowledge}</SelectItem>
+            <SelectItem value="behavioral">{texts.behavioral}</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={publishedFilter} onValueChange={setPublishedFilter}>
+          <SelectTrigger>
+            <SelectValue placeholder={texts.status} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{texts.allStatus}</SelectItem>
+            <SelectItem value="published">{texts.published}</SelectItem>
+            <SelectItem value="unpublished">{texts.unpublished}</SelectItem>
+          </SelectContent>
+        </Select>
+      </AdminFilterCard>
+
+      {/* Question Sets Table */}
+      <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
+        <table className="w-full">
+          <thead className="bg-gray-50 border-b">
+            <tr>
+              <th className="text-left py-3 px-4 font-medium text-gray-700">
+                {texts.titleColumn}
+              </th>
+              <th className="text-left py-3 px-4 font-medium text-gray-700">
+                {texts.competency}
+              </th>
+              <th className="text-left py-3 px-4 font-medium text-gray-700">
+                {texts.section}
+              </th>
+              <th className="text-center py-3 px-4 font-medium text-gray-700">
+                {texts.questions}
+              </th>
+              <th className="text-center py-3 px-4 font-medium text-gray-700">
+                {texts.status}
+              </th>
+              <th className="text-right py-3 px-4 font-medium text-gray-700">
+                {texts.actions}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredSets?.map((set) => (
+              <tr key={set.id} className="border-b hover:bg-gray-50">
+                <td className="py-3 px-4">
+                  <div>
+                    <p className="font-medium text-gray-900">{set.title}</p>
+                    {set.title_ar && (
+                      <p className="text-sm text-gray-500" dir="rtl">
+                        {set.title_ar}
+                      </p>
+                    )}
+                  </div>
+                </td>
+                <td className="py-3 px-4">
+                  <p className="text-gray-700">
+                    {set.competency?.competency_name || '-'}
+                  </p>
+                </td>
+                <td className="py-3 px-4">
+                  <span
+                    className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                      set.section_type === 'introduction'
+                        ? 'bg-gray-100 text-gray-700'
+                        : set.section_type === 'knowledge'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'bg-purple-100 text-purple-700'
+                    }`}
+                  >
+                    {set.section_type === 'introduction' ? texts.introduction :
+                     set.section_type === 'knowledge' ? texts.knowledge : texts.behavioral}
+                  </span>
+                </td>
+                <td className="py-3 px-4 text-center">
+                  <span className="font-semibold text-gray-900">
+                    {set.question_count}
+                  </span>
+                </td>
+                <td className="py-3 px-4 text-center">
+                  <button
+                    onClick={() => handleTogglePublish(set)}
+                    className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-colors ${
+                      set.is_published
+                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {set.is_published ? (
+                      <>
+                        <Eye className="w-3 h-3" />
+                        {texts.published}
+                      </>
+                    ) : (
+                      <>
+                        <EyeOff className="w-3 h-3" />
+                        {texts.draft}
+                      </>
+                    )}
+                  </button>
+                </td>
+                <td className="py-3 px-4 text-right">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm">
+                        <MoreHorizontal className="w-4 h-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onClick={() =>
+                          navigate(`/admin/question-bank/sets/${set.id}`)
+                        }
+                      >
+                        <HelpCircle className="w-4 h-4 mr-2" />
+                        {texts.manageQuestions}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setEditingSet(set)}>
+                        <Edit className="w-4 h-4 mr-2" />
+                        {texts.editSet}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => setDeleteConfirmSet(set)}
+                        className="text-red-600"
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        {texts.delete}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {filteredSets?.length === 0 && (
+          <div className="text-center py-12">
+            <HelpCircle className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+            <p className="text-gray-600">{texts.noQuestionSetsFound}</p>
+          </div>
+        )}
+      </div>
+
+      {/* Create Dialog */}
+      <QuestionSetDialog
+        open={isCreateDialogOpen}
+        onOpenChange={setIsCreateDialogOpen}
+        onSubmit={handleCreate}
+        title={texts.createSet}
+        texts={texts}
+      />
+
+      {/* Edit Dialog */}
+      <QuestionSetDialog
+        open={!!editingSet}
+        onOpenChange={(open) => !open && setEditingSet(null)}
+        onSubmit={(data) => editingSet && handleUpdate(editingSet.id, data)}
+        title={texts.editSetTitle}
+        defaultValues={editingSet || undefined}
+        texts={texts}
+      />
+
+      {/* Delete Confirmation */}
+      <Dialog
+        open={!!deleteConfirmSet}
+        onOpenChange={(open) => !open && setDeleteConfirmSet(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{texts.deleteSetTitle}</DialogTitle>
+            <DialogDescription>
+              {texts.deleteConfirmation.replace('{title}', deleteConfirmSet?.title || '')}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteConfirmSet(null)}
+            >
+              {texts.cancel}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() =>
+                deleteConfirmSet && handleDelete(deleteConfirmSet.id)
+              }
+            >
+              {texts.delete}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// Question Set Dialog Component
+interface QuestionSetDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (data: QuestionSetInsert | QuestionSetUpdate) => void;
+  title: string;
+  defaultValues?: Partial<QuestionSetWithCompetency>;
+  texts: Record<string, string>;
+}
+
+function QuestionSetDialog({
+  open,
+  onOpenChange,
+  onSubmit,
+  title,
+  defaultValues,
+  texts,
+}: QuestionSetDialogProps) {
+  const [formData, setFormData] = useState<Partial<QuestionSetInsert>>({
+    certification_type: defaultValues?.certification_type || 'CP',
+    section_type: defaultValues?.section_type || 'knowledge',
+    competency_id: defaultValues?.competency_id || null,
+    sub_unit_id: defaultValues?.sub_unit_id || null,
+    title: defaultValues?.title || '',
+    title_ar: defaultValues?.title_ar || '',
+    description: defaultValues?.description || '',
+    description_ar: defaultValues?.description_ar || '',
+    is_final_test: defaultValues?.is_final_test || false,
+    time_limit_minutes: defaultValues?.time_limit_minutes || undefined,
+    passing_score: defaultValues?.passing_score || 70,
+    order_index: defaultValues?.order_index || 1,
+    is_published: defaultValues?.is_published || false,
+  });
+
+  // Fetch modules for competency selector
+  const { data: modules } = useQuery({
+    queryKey: curriculumKeys.modulesList({}),
+    queryFn: async () => {
+      const result = await CurriculumService.getModules({});
+      return result.data || [];
+    },
+  });
+
+  // Fetch lessons for sub-unit selector (filtered by selected competency)
+  const { data: lessons } = useLessonsByModule(
+    formData.competency_id || undefined,
+    !!formData.competency_id
+  );
+
+  const handleSubmit = () => {
+    if (!formData.title) {
+      toast.error(texts.titleRequired);
+      return;
+    }
+    onSubmit(formData as QuestionSetInsert);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>{texts.sectionType}</Label>
+              <Select
+                value={formData.section_type}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, section_type: value as any })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="introduction">{texts.introduction}</SelectItem>
+                  <SelectItem value="knowledge">{texts.knowledge}</SelectItem>
+                  <SelectItem value="behavioral">{texts.behavioral}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>{texts.orderIndex}</Label>
+              <Input
+                type="number"
+                value={formData.order_index}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    order_index: parseInt(e.target.value),
+                  })
+                }
+              />
+            </div>
+          </div>
+
+          {/* Competency Linkage */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>{texts.competencyModule}</Label>
+              <Select
+                value={formData.competency_id || 'none'}
+                onValueChange={(value) => {
+                  const newCompetencyId = value === 'none' ? null : value;
+                  setFormData({
+                    ...formData,
+                    competency_id: newCompetencyId,
+                    sub_unit_id: null, // Reset sub-unit when competency changes
+                  });
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={texts.selectCompetency} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{texts.none}</SelectItem>
+                  {modules?.map((module) => (
+                    <SelectItem key={module.id} value={module.id}>
+                      {module.order_index}. {module.competency_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>{texts.subCompetency}</Label>
+              <Select
+                value={formData.sub_unit_id || 'none'}
+                onValueChange={(value) =>
+                  setFormData({
+                    ...formData,
+                    sub_unit_id: value === 'none' ? null : value,
+                  })
+                }
+                disabled={!formData.competency_id}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={texts.selectLesson} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{texts.noneOption}</SelectItem>
+                  {lessons?.map((lesson) => (
+                    <SelectItem key={lesson.id} value={lesson.id}>
+                      {lesson.order_index}. {lesson.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div>
+            <Label>{texts.titleEnglish}</Label>
+            <Input
+              value={formData.title}
+              onChange={(e) =>
+                setFormData({ ...formData, title: e.target.value })
+              }
+              placeholder={texts.enterTitle}
+            />
+          </div>
+
+          <div>
+            <Label>{texts.titleArabic}</Label>
+            <Input
+              value={formData.title_ar || ''}
+              onChange={(e) =>
+                setFormData({ ...formData, title_ar: e.target.value })
+              }
+              placeholder={texts.enterTitleAr}
+              dir="rtl"
+            />
+          </div>
+
+          <div>
+            <Label>{texts.descriptionEnglish}</Label>
+            <Textarea
+              value={formData.description || ''}
+              onChange={(e) =>
+                setFormData({ ...formData, description: e.target.value })
+              }
+              placeholder={texts.enterDescription}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>{texts.timeLimitMinutes}</Label>
+              <Input
+                type="number"
+                value={formData.time_limit_minutes || ''}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    time_limit_minutes: e.target.value
+                      ? parseInt(e.target.value)
+                      : undefined,
+                  })
+                }
+                placeholder={texts.optional}
+              />
+            </div>
+            <div>
+              <Label>{texts.passingScore}</Label>
+              <Input
+                type="number"
+                value={formData.passing_score}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    passing_score: parseInt(e.target.value),
+                  })
+                }
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={formData.is_final_test}
+                onCheckedChange={(checked) =>
+                  setFormData({ ...formData, is_final_test: checked })
+                }
+              />
+              <Label>{texts.finalTest}</Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={formData.is_published}
+                onCheckedChange={(checked) =>
+                  setFormData({ ...formData, is_published: checked })
+                }
+              />
+              <Label>{texts.published}</Label>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            {texts.cancel}
+          </Button>
+          <Button onClick={handleSubmit}>
+            {defaultValues ? texts.update : texts.create}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

@@ -1,0 +1,909 @@
+/**
+ * Question Bank Service
+ * Handles all question bank operations
+ */
+
+import { supabase } from '@/shared/config/supabase.config';
+import type {
+  QuestionSet,
+  QuestionSetInsert,
+  QuestionSetUpdate,
+  QuestionSetWithProgress,
+  QuestionSetWithCompetency,
+  PracticeQuestion,
+  PracticeQuestionInsert,
+  PracticeQuestionUpdate,
+  PracticeQuestionWithAttempt,
+  UserQuestionBankProgress,
+  UserQuestionAttempt,
+  QuestionSetFilters,
+  QuestionFilters,
+  QuestionBankStats,
+  PracticeSessionResult,
+} from './question-bank.types';
+
+interface ServiceResponse<T> {
+  data?: T;
+  error?: {
+    code: string;
+    message: string;
+    details?: any;
+  };
+}
+
+/**
+ * Question Bank Service
+ */
+export class QuestionBankService {
+  // ==========================================================================
+  // QUESTION SET OPERATIONS
+  // ==========================================================================
+
+  /**
+   * Get all question sets with optional filters
+   */
+  static async getQuestionSets(
+    filters?: QuestionSetFilters
+  ): Promise<ServiceResponse<QuestionSet[]>> {
+    try {
+      let query = supabase
+        .from('curriculum_question_sets')
+        .select('*')
+        .order('order_index', { ascending: true });
+
+      if (filters?.certification_type) {
+        query = query.eq('certification_type', filters.certification_type);
+      }
+
+      if (filters?.section_type) {
+        query = query.eq('section_type', filters.section_type);
+      }
+
+      if (filters?.competency_id) {
+        query = query.eq('competency_id', filters.competency_id);
+      }
+
+      if (filters?.is_published !== undefined) {
+        query = query.eq('is_published', filters.is_published);
+      }
+
+      if (filters?.is_final_test !== undefined) {
+        query = query.eq('is_final_test', filters.is_final_test);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+
+      return { data: data || [] };
+    } catch (error: any) {
+      return {
+        error: {
+          code: error.code || 'FETCH_ERROR',
+          message: 'Failed to fetch question sets',
+          details: error,
+        },
+      };
+    }
+  }
+
+  /**
+   * Get question sets with user progress
+   */
+  static async getQuestionSetsWithProgress(
+    userId: string,
+    certificationType: string
+  ): Promise<ServiceResponse<QuestionSetWithProgress[]>> {
+    try {
+      // Get all published question sets
+      const { data: sets, error: setsError } = await supabase
+        .from('curriculum_question_sets')
+        .select('*')
+        .eq('certification_type', certificationType)
+        .eq('is_published', true)
+        .order('order_index', { ascending: true });
+
+      if (setsError) throw setsError;
+
+      // Get user progress for all sets
+      const { data: progress, error: progressError } = await supabase
+        .from('user_question_bank_progress')
+        .select('*')
+        .eq('user_id', userId);
+
+      if (progressError) throw progressError;
+
+      // Create progress map
+      const progressMap = new Map(
+        progress?.map((p) => [p.question_set_id, p]) || []
+      );
+
+      // Combine sets with progress
+      const setsWithProgress: QuestionSetWithProgress[] = (sets || []).map(
+        (set) => ({
+          ...set,
+          progress: progressMap.get(set.id) || null,
+        })
+      );
+
+      return { data: setsWithProgress };
+    } catch (error: any) {
+      return {
+        error: {
+          code: error.code || 'FETCH_ERROR',
+          message: 'Failed to fetch question sets with progress',
+          details: error,
+        },
+      };
+    }
+  }
+
+  /**
+   * Get question sets with competency info (for admin)
+   */
+  static async getQuestionSetsWithCompetency(
+    filters?: QuestionSetFilters
+  ): Promise<ServiceResponse<QuestionSetWithCompetency[]>> {
+    try {
+      let query = supabase
+        .from('curriculum_question_sets')
+        .select(
+          `
+          *,
+          competency:curriculum_modules!competency_id(
+            id,
+            competency_name,
+            competency_name_ar,
+            section_type
+          ),
+          sub_unit:curriculum_lessons!sub_unit_id(
+            id,
+            title,
+            title_ar
+          )
+        `
+        )
+        .order('order_index', { ascending: true });
+
+      if (filters?.certification_type) {
+        query = query.eq('certification_type', filters.certification_type);
+      }
+
+      if (filters?.section_type) {
+        query = query.eq('section_type', filters.section_type);
+      }
+
+      if (filters?.is_published !== undefined) {
+        query = query.eq('is_published', filters.is_published);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+
+      return { data: data || [] };
+    } catch (error: any) {
+      return {
+        error: {
+          code: error.code || 'FETCH_ERROR',
+          message: 'Failed to fetch question sets with competency',
+          details: error,
+        },
+      };
+    }
+  }
+
+  /**
+   * Get single question set by ID
+   */
+  static async getQuestionSetById(
+    setId: string
+  ): Promise<ServiceResponse<QuestionSet>> {
+    try {
+      const { data, error } = await supabase
+        .from('curriculum_question_sets')
+        .select('*')
+        .eq('id', setId)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) {
+        return {
+          error: {
+            code: 'NOT_FOUND',
+            message: 'Question set not found',
+          },
+        };
+      }
+
+      return { data };
+    } catch (error: any) {
+      return {
+        error: {
+          code: error.code || 'FETCH_ERROR',
+          message: 'Failed to fetch question set',
+          details: error,
+        },
+      };
+    }
+  }
+
+  /**
+   * Create question set (Admin)
+   */
+  static async createQuestionSet(
+    questionSet: QuestionSetInsert
+  ): Promise<ServiceResponse<QuestionSet>> {
+    try {
+      const { data, error } = await supabase
+        .from('curriculum_question_sets')
+        .insert(questionSet)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return { data };
+    } catch (error: any) {
+      return {
+        error: {
+          code: error.code || 'CREATE_ERROR',
+          message: 'Failed to create question set',
+          details: error,
+        },
+      };
+    }
+  }
+
+  /**
+   * Update question set (Admin)
+   */
+  static async updateQuestionSet(
+    setId: string,
+    updates: QuestionSetUpdate
+  ): Promise<ServiceResponse<QuestionSet>> {
+    try {
+      const { data, error } = await supabase
+        .from('curriculum_question_sets')
+        .update(updates)
+        .eq('id', setId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return { data };
+    } catch (error: any) {
+      return {
+        error: {
+          code: error.code || 'UPDATE_ERROR',
+          message: 'Failed to update question set',
+          details: error,
+        },
+      };
+    }
+  }
+
+  /**
+   * Delete question set (Admin)
+   */
+  static async deleteQuestionSet(
+    setId: string
+  ): Promise<ServiceResponse<void>> {
+    try {
+      const { error } = await supabase
+        .from('curriculum_question_sets')
+        .delete()
+        .eq('id', setId);
+
+      if (error) throw error;
+
+      return { data: undefined };
+    } catch (error: any) {
+      return {
+        error: {
+          code: error.code || 'DELETE_ERROR',
+          message: 'Failed to delete question set',
+          details: error,
+        },
+      };
+    }
+  }
+
+  // ==========================================================================
+  // QUESTION OPERATIONS
+  // ==========================================================================
+
+  /**
+   * Get questions for a question set
+   */
+  static async getQuestions(
+    questionSetId: string,
+    filters?: QuestionFilters
+  ): Promise<ServiceResponse<PracticeQuestion[]>> {
+    try {
+      let query = supabase
+        .from('curriculum_practice_questions')
+        .select('*')
+        .eq('question_set_id', questionSetId)
+        .order('order_index', { ascending: true });
+
+      if (filters?.difficulty_level) {
+        query = query.eq('difficulty_level', filters.difficulty_level);
+      }
+
+      if (filters?.is_published !== undefined) {
+        query = query.eq('is_published', filters.is_published);
+      }
+
+      if (filters?.tags && filters.tags.length > 0) {
+        query = query.overlaps('tags', filters.tags);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+
+      return { data: data || [] };
+    } catch (error: any) {
+      return {
+        error: {
+          code: error.code || 'FETCH_ERROR',
+          message: 'Failed to fetch questions',
+          details: error,
+        },
+      };
+    }
+  }
+
+  /**
+   * Get questions with user's last attempt
+   */
+  static async getQuestionsWithAttempts(
+    userId: string,
+    questionSetId: string
+  ): Promise<ServiceResponse<PracticeQuestionWithAttempt[]>> {
+    try {
+      // Get all published questions
+      const { data: questions, error: questionsError } = await supabase
+        .from('curriculum_practice_questions')
+        .select('*')
+        .eq('question_set_id', questionSetId)
+        .eq('is_published', true)
+        .order('order_index', { ascending: true });
+
+      if (questionsError) throw questionsError;
+
+      // Get user's latest attempts for each question
+      const { data: attempts, error: attemptsError } = await supabase
+        .from('user_question_attempts')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('question_set_id', questionSetId)
+        .order('attempted_at', { ascending: false });
+
+      if (attemptsError) throw attemptsError;
+
+      // Create map of latest attempt per question
+      const attemptMap = new Map<string, UserQuestionAttempt>();
+      attempts?.forEach((attempt) => {
+        if (!attemptMap.has(attempt.question_id)) {
+          attemptMap.set(attempt.question_id, attempt);
+        }
+      });
+
+      // Combine questions with attempts
+      const questionsWithAttempts: PracticeQuestionWithAttempt[] = (
+        questions || []
+      ).map((q) => ({
+        ...q,
+        last_attempt: attemptMap.get(q.id) || null,
+      }));
+
+      return { data: questionsWithAttempts };
+    } catch (error: any) {
+      return {
+        error: {
+          code: error.code || 'FETCH_ERROR',
+          message: 'Failed to fetch questions with attempts',
+          details: error,
+        },
+      };
+    }
+  }
+
+  /**
+   * Get single question by ID
+   */
+  static async getQuestionById(
+    questionId: string
+  ): Promise<ServiceResponse<PracticeQuestion>> {
+    try {
+      const { data, error } = await supabase
+        .from('curriculum_practice_questions')
+        .select('*')
+        .eq('id', questionId)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) {
+        return {
+          error: {
+            code: 'NOT_FOUND',
+            message: 'Question not found',
+          },
+        };
+      }
+
+      return { data };
+    } catch (error: any) {
+      return {
+        error: {
+          code: error.code || 'FETCH_ERROR',
+          message: 'Failed to fetch question',
+          details: error,
+        },
+      };
+    }
+  }
+
+  /**
+   * Create question (Admin)
+   */
+  static async createQuestion(
+    question: PracticeQuestionInsert
+  ): Promise<ServiceResponse<PracticeQuestion>> {
+    try {
+      const { data, error } = await supabase
+        .from('curriculum_practice_questions')
+        .insert({
+          ...question,
+          options: JSON.stringify(question.options),
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return { data };
+    } catch (error: any) {
+      return {
+        error: {
+          code: error.code || 'CREATE_ERROR',
+          message: 'Failed to create question',
+          details: error,
+        },
+      };
+    }
+  }
+
+  /**
+   * Update question (Admin)
+   */
+  static async updateQuestion(
+    questionId: string,
+    updates: PracticeQuestionUpdate
+  ): Promise<ServiceResponse<PracticeQuestion>> {
+    try {
+      const updateData = {
+        ...updates,
+        options: updates.options ? JSON.stringify(updates.options) : undefined,
+      };
+
+      const { data, error } = await supabase
+        .from('curriculum_practice_questions')
+        .update(updateData)
+        .eq('id', questionId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return { data };
+    } catch (error: any) {
+      return {
+        error: {
+          code: error.code || 'UPDATE_ERROR',
+          message: 'Failed to update question',
+          details: error,
+        },
+      };
+    }
+  }
+
+  /**
+   * Delete question (Admin)
+   */
+  static async deleteQuestion(
+    questionId: string
+  ): Promise<ServiceResponse<void>> {
+    try {
+      const { error } = await supabase
+        .from('curriculum_practice_questions')
+        .delete()
+        .eq('id', questionId);
+
+      if (error) throw error;
+
+      return { data: undefined };
+    } catch (error: any) {
+      return {
+        error: {
+          code: error.code || 'DELETE_ERROR',
+          message: 'Failed to delete question',
+          details: error,
+        },
+      };
+    }
+  }
+
+  /**
+   * Bulk create questions (Admin - for import)
+   */
+  static async bulkCreateQuestions(
+    questions: PracticeQuestionInsert[]
+  ): Promise<ServiceResponse<PracticeQuestion[]>> {
+    try {
+      const questionsWithJsonOptions = questions.map((q) => ({
+        ...q,
+        options: JSON.stringify(q.options),
+      }));
+
+      const { data, error } = await supabase
+        .from('curriculum_practice_questions')
+        .insert(questionsWithJsonOptions)
+        .select();
+
+      if (error) throw error;
+
+      return { data: data || [] };
+    } catch (error: any) {
+      return {
+        error: {
+          code: error.code || 'CREATE_ERROR',
+          message: 'Failed to bulk create questions',
+          details: error,
+        },
+      };
+    }
+  }
+
+  // ==========================================================================
+  // USER PROGRESS OPERATIONS
+  // ==========================================================================
+
+  /**
+   * Record a question attempt
+   */
+  static async recordAttempt(
+    userId: string,
+    questionId: string,
+    questionSetId: string,
+    selectedOptionId: string,
+    isCorrect: boolean,
+    timeSpentSeconds?: number
+  ): Promise<ServiceResponse<UserQuestionAttempt>> {
+    try {
+      const { data, error } = await supabase
+        .from('user_question_attempts')
+        .insert({
+          user_id: userId,
+          question_id: questionId,
+          question_set_id: questionSetId,
+          selected_option_id: selectedOptionId,
+          is_correct: isCorrect,
+          time_spent_seconds: timeSpentSeconds,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return { data };
+    } catch (error: any) {
+      return {
+        error: {
+          code: error.code || 'CREATE_ERROR',
+          message: 'Failed to record attempt',
+          details: error,
+        },
+      };
+    }
+  }
+
+  /**
+   * Toggle favorite status for a question
+   */
+  static async toggleFavorite(
+    userId: string,
+    questionId: string,
+    isFavorited: boolean
+  ): Promise<ServiceResponse<void>> {
+    try {
+      // Update the most recent attempt for this question
+      const { error } = await supabase
+        .from('user_question_attempts')
+        .update({ is_favorited: isFavorited })
+        .eq('user_id', userId)
+        .eq('question_id', questionId)
+        .order('attempted_at', { ascending: false })
+        .limit(1);
+
+      if (error) throw error;
+
+      return { data: undefined };
+    } catch (error: any) {
+      return {
+        error: {
+          code: error.code || 'UPDATE_ERROR',
+          message: 'Failed to toggle favorite',
+          details: error,
+        },
+      };
+    }
+  }
+
+  /**
+   * Get user's favorited questions
+   */
+  static async getFavoritedQuestions(
+    userId: string,
+    certificationType?: string
+  ): Promise<ServiceResponse<PracticeQuestion[]>> {
+    try {
+      // Get favorited question IDs
+      const { data: attempts, error: attemptsError } = await supabase
+        .from('user_question_attempts')
+        .select('question_id')
+        .eq('user_id', userId)
+        .eq('is_favorited', true);
+
+      if (attemptsError) throw attemptsError;
+
+      if (!attempts || attempts.length === 0) {
+        return { data: [] };
+      }
+
+      const questionIds = [...new Set(attempts.map((a) => a.question_id))];
+
+      // Get the questions
+      let query = supabase
+        .from('curriculum_practice_questions')
+        .select('*')
+        .in('id', questionIds);
+
+      const { data: questions, error: questionsError } = await query;
+
+      if (questionsError) throw questionsError;
+
+      return { data: questions || [] };
+    } catch (error: any) {
+      return {
+        error: {
+          code: error.code || 'FETCH_ERROR',
+          message: 'Failed to fetch favorited questions',
+          details: error,
+        },
+      };
+    }
+  }
+
+  /**
+   * Get user progress for a question set
+   */
+  static async getSetProgress(
+    userId: string,
+    questionSetId: string
+  ): Promise<ServiceResponse<UserQuestionBankProgress | null>> {
+    try {
+      const { data, error } = await supabase
+        .from('user_question_bank_progress')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('question_set_id', questionSetId)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      return { data };
+    } catch (error: any) {
+      return {
+        error: {
+          code: error.code || 'FETCH_ERROR',
+          message: 'Failed to fetch set progress',
+          details: error,
+        },
+      };
+    }
+  }
+
+  /**
+   * Complete a practice session
+   */
+  static async completePracticeSession(
+    userId: string,
+    questionSetId: string,
+    result: PracticeSessionResult
+  ): Promise<ServiceResponse<UserQuestionBankProgress>> {
+    try {
+      // Upsert progress
+      const { data, error } = await supabase
+        .from('user_question_bank_progress')
+        .upsert(
+          {
+            user_id: userId,
+            question_set_id: questionSetId,
+            last_score_percentage: result.scorePercentage,
+            best_score_percentage: result.scorePercentage, // Will be handled by trigger
+            attempts_count: 1, // Will be incremented
+            last_attempted_at: new Date().toISOString(),
+            completed_at: result.passed ? new Date().toISOString() : null,
+          },
+          {
+            onConflict: 'user_id,question_set_id',
+          }
+        )
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return { data };
+    } catch (error: any) {
+      return {
+        error: {
+          code: error.code || 'UPDATE_ERROR',
+          message: 'Failed to complete practice session',
+          details: error,
+        },
+      };
+    }
+  }
+
+  // ==========================================================================
+  // STATISTICS
+  // ==========================================================================
+
+  /**
+   * Get user's question bank statistics
+   */
+  static async getUserStats(
+    userId: string,
+    certificationType?: string
+  ): Promise<ServiceResponse<QuestionBankStats>> {
+    try {
+      // Get all question sets
+      let setsQuery = supabase
+        .from('curriculum_question_sets')
+        .select('id, question_count')
+        .eq('is_published', true);
+
+      if (certificationType) {
+        setsQuery = setsQuery.eq('certification_type', certificationType);
+      }
+
+      const { data: sets, error: setsError } = await setsQuery;
+      if (setsError) throw setsError;
+
+      const setIds = sets?.map((s) => s.id) || [];
+      const totalQuestions = sets?.reduce((sum, s) => sum + s.question_count, 0) || 0;
+
+      // Get user progress
+      const { data: progress, error: progressError } = await supabase
+        .from('user_question_bank_progress')
+        .select('*')
+        .eq('user_id', userId)
+        .in('question_set_id', setIds);
+
+      if (progressError) throw progressError;
+
+      // Get favorited count
+      const { count: favoritedCount, error: favError } = await supabase
+        .from('user_question_attempts')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('is_favorited', true);
+
+      if (favError) throw favError;
+
+      // Calculate stats
+      const questionsAttempted = progress?.reduce(
+        (sum, p) => sum + p.questions_attempted,
+        0
+      ) || 0;
+      const questionsCorrect = progress?.reduce(
+        (sum, p) => sum + p.questions_correct,
+        0
+      ) || 0;
+      const setsCompleted = progress?.filter((p) => p.completed_at !== null).length || 0;
+      const averageScore =
+        progress && progress.length > 0
+          ? progress.reduce((sum, p) => sum + (p.best_score_percentage || 0), 0) /
+            progress.length
+          : 0;
+
+      return {
+        data: {
+          totalQuestionSets: sets?.length || 0,
+          totalQuestions,
+          questionsAttempted,
+          questionsCorrect,
+          averageScore,
+          favoritedQuestions: favoritedCount || 0,
+          setsCompleted,
+        },
+      };
+    } catch (error: any) {
+      return {
+        error: {
+          code: error.code || 'FETCH_ERROR',
+          message: 'Failed to fetch user stats',
+          details: error,
+        },
+      };
+    }
+  }
+
+  // ==========================================================================
+  // ADMIN STATISTICS
+  // ==========================================================================
+
+  /**
+   * Get admin statistics for question bank
+   */
+  static async getAdminStats(
+    certificationType?: string
+  ): Promise<ServiceResponse<{
+    totalSets: number;
+    totalQuestions: number;
+    publishedSets: number;
+    unpublishedSets: number;
+    questionsByDifficulty: { easy: number; medium: number; hard: number };
+  }>> {
+    try {
+      // Get sets count
+      let setsQuery = supabase
+        .from('curriculum_question_sets')
+        .select('id, is_published', { count: 'exact' });
+
+      if (certificationType) {
+        setsQuery = setsQuery.eq('certification_type', certificationType);
+      }
+
+      const { data: sets, error: setsError } = await setsQuery;
+      if (setsError) throw setsError;
+
+      // Get questions by difficulty
+      let questionsQuery = supabase
+        .from('curriculum_practice_questions')
+        .select('difficulty_level');
+
+      const { data: questions, error: questionsError } = await questionsQuery;
+      if (questionsError) throw questionsError;
+
+      const difficultyCount = {
+        easy: questions?.filter((q) => q.difficulty_level === 'easy').length || 0,
+        medium: questions?.filter((q) => q.difficulty_level === 'medium').length || 0,
+        hard: questions?.filter((q) => q.difficulty_level === 'hard').length || 0,
+      };
+
+      return {
+        data: {
+          totalSets: sets?.length || 0,
+          totalQuestions: questions?.length || 0,
+          publishedSets: sets?.filter((s) => s.is_published).length || 0,
+          unpublishedSets: sets?.filter((s) => !s.is_published).length || 0,
+          questionsByDifficulty: difficultyCount,
+        },
+      };
+    } catch (error: any) {
+      return {
+        error: {
+          code: error.code || 'FETCH_ERROR',
+          message: 'Failed to fetch admin stats',
+          details: error,
+        },
+      };
+    }
+  }
+}

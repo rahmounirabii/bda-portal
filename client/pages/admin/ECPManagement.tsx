@@ -1,0 +1,1203 @@
+/**
+ * Admin ECP Management
+ *
+ * Dedicated management for ECP partners including:
+ * - Partner overview with stats
+ * - Voucher request approval
+ * - Trainer approval workflow
+ * - Performance monitoring
+ */
+
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Progress } from "@/components/ui/progress";
+import { useToast } from "@/hooks/use-toast";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
+import { createAdminClient } from "@/shared/config/supabase-admin.config";
+import { useLanguage } from '@/contexts/LanguageContext';
+import {
+  Building2,
+  Ticket,
+  UserCheck,
+  Search,
+  MoreHorizontal,
+  CheckCircle,
+  XCircle,
+  Clock,
+  AlertCircle,
+  Eye,
+  Download,
+  Users,
+  Loader2,
+  RefreshCw,
+  Plus,
+  Upload,
+} from "lucide-react";
+
+// Types
+interface ECPPartnerWithStats {
+  id: string;
+  email: string;
+  company_name?: string;
+  first_name?: string;
+  last_name?: string;
+  country_code?: string;
+  created_at: string;
+  license_status?: string;
+  vouchers_total: number;
+  vouchers_used: number;
+  trainers_approved: number;
+  trainers_pending: number;
+  trainees_total: number;
+  batches_total: number;
+}
+
+interface VoucherRequest {
+  id: string;
+  partner_id: string;
+  certification_type: string;
+  quantity: number;
+  unit_price: number;
+  total_amount: number;
+  status: string;
+  payment_method?: string;
+  created_at: string;
+  partner?: {
+    email: string;
+    company_name?: string;
+    first_name?: string;
+    last_name?: string;
+  };
+}
+
+interface TrainerApplication {
+  id: string;
+  partner_id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  status: string;
+  certifications: string[];
+  bio?: string;
+  created_at: string;
+  partner?: {
+    email: string;
+    company_name?: string;
+  };
+}
+
+// Fetch functions
+async function fetchECPPartners(): Promise<ECPPartnerWithStats[]> {
+  // Get all ECP partners from partners table
+  const { data: partners, error: partnersError } = await supabase
+    .from('partners')
+    .select('*')
+    .eq('partner_type', 'ecp')
+    .order('created_at', { ascending: false });
+
+  if (partnersError) throw partnersError;
+
+  // Get stats for each partner
+  const partnersWithStats = await Promise.all(
+    (partners || []).map(async (partner: any) => {
+      const partnerId = partner.id;
+
+      // Get voucher stats from allocations
+      const { data: allocations } = await supabase
+        .from('ecp_voucher_allocations')
+        .select('quantity, vouchers_used')
+        .eq('partner_id', partnerId);
+
+      const vouchersTotal = allocations?.reduce((sum, a) => sum + (a.quantity || 0), 0) || 0;
+      const vouchersUsed = allocations?.reduce((sum, a) => sum + (a.vouchers_used || 0), 0) || 0;
+
+      // Get trainer stats
+      const { data: trainers } = await supabase
+        .from('ecp_trainers')
+        .select('status')
+        .eq('partner_id', partnerId);
+
+      const trainersApproved = trainers?.filter((t) => t.status === 'approved').length || 0;
+      const trainersPending = trainers?.filter((t) => t.status === 'pending').length || 0;
+
+      // Get trainee count
+      const { count: traineesCount } = await supabase
+        .from('ecp_trainees')
+        .select('id', { count: 'exact', head: true })
+        .eq('partner_id', partnerId);
+
+      // Get batch count
+      const { count: batchesCount } = await supabase
+        .from('ecp_training_batches')
+        .select('id', { count: 'exact', head: true })
+        .eq('partner_id', partnerId);
+
+      // Get license status
+      const { data: license } = await supabase
+        .from('ecp_licenses')
+        .select('status')
+        .eq('partner_id', partnerId)
+        .maybeSingle();
+
+      return {
+        id: partner.id,
+        email: partner.contact_email,
+        company_name: partner.company_name,
+        first_name: partner.contact_person || '',
+        last_name: '',
+        country_code: partner.country,
+        created_at: partner.created_at,
+        license_status: license?.status || 'pending',
+        vouchers_total: vouchersTotal,
+        vouchers_used: vouchersUsed,
+        trainers_approved: trainersApproved,
+        trainers_pending: trainersPending,
+        trainees_total: traineesCount || 0,
+        batches_total: batchesCount || 0,
+      };
+    })
+  );
+
+  return partnersWithStats;
+}
+
+async function fetchVoucherRequests(): Promise<VoucherRequest[]> {
+  const { data, error } = await supabase
+    .from('ecp_voucher_requests')
+    .select(`
+      *,
+      partners!ecp_voucher_requests_partner_id_fkey(
+        id,
+        company_name,
+        contact_email,
+        contact_person
+      )
+    `)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+
+  // Map to include partner info
+  return (data || []).map((req: any) => ({
+    ...req,
+    partner: {
+      email: req.partners?.contact_email || '',
+      company_name: req.partners?.company_name || '',
+      first_name: req.partners?.contact_person || '',
+      last_name: '',
+    }
+  }));
+}
+
+async function fetchPendingTrainers(): Promise<TrainerApplication[]> {
+  const { data, error } = await supabase
+    .from('ecp_trainers')
+    .select(`
+      *,
+      partners!ecp_trainers_partner_id_fkey(
+        id,
+        company_name,
+        contact_email
+      )
+    `)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+
+  // Map to include partner info
+  return (data || []).map((trainer: any) => ({
+    ...trainer,
+    partner: {
+      email: trainer.partners?.contact_email || '',
+      company_name: trainer.partners?.company_name || '',
+    }
+  }));
+}
+
+export default function ECPManagement() {
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { t } = useLanguage();
+
+  const [activeTab, setActiveTab] = useState("partners");
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+
+  // Dialog states
+  const [addPartnerDialogOpen, setAddPartnerDialogOpen] = useState(false);
+  const [newPartnerForm, setNewPartnerForm] = useState({
+    email: '',
+    company_name: '',
+    contact_person: '',
+    contact_phone: '',
+    country: '',
+    city: '',
+    address: '',
+  });
+
+  const [reviewVoucherDialogOpen, setReviewVoucherDialogOpen] = useState(false);
+  const [selectedVoucherRequest, setSelectedVoucherRequest] = useState<VoucherRequest | null>(null);
+
+  const [reviewTrainerDialogOpen, setReviewTrainerDialogOpen] = useState(false);
+  const [selectedTrainer, setSelectedTrainer] = useState<TrainerApplication | null>(null);
+  const [rejectionReason, setRejectionReason] = useState("");
+
+  // Queries
+  const { data: partners, isLoading: partnersLoading, error: partnersError } = useQuery({
+    queryKey: ['admin', 'ecp-partners'],
+    queryFn: fetchECPPartners,
+  });
+
+  const { data: voucherRequests, isLoading: requestsLoading } = useQuery({
+    queryKey: ['admin', 'ecp-voucher-requests'],
+    queryFn: fetchVoucherRequests,
+  });
+
+  const { data: trainers, isLoading: trainersLoading } = useQuery({
+    queryKey: ['admin', 'ecp-trainers'],
+    queryFn: fetchPendingTrainers,
+  });
+
+  // Mutations
+  const createPartnerMutation = useMutation({
+    mutationFn: async (formData: typeof newPartnerForm) => {
+      // First, create user account with ecp role using admin client
+      const adminClient = createAdminClient();
+      const tempPassword = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+
+      const { data: userData, error: userError } = await adminClient.auth.admin.createUser({
+        email: formData.email,
+        password: tempPassword,
+        email_confirm: true,
+        user_metadata: {
+          role: 'ecp',
+          source: 'admin_created',
+        },
+      });
+
+      if (userError) throw userError;
+      if (!userData.user) throw new Error('Failed to create user');
+
+      // Update user profile in public.users table
+      const { error: profileError } = await supabase
+        .from('users')
+        .update({
+          role: 'ecp',
+          first_name: formData.contact_person.split(' ')[0] || '',
+          last_name: formData.contact_person.split(' ').slice(1).join(' ') || '',
+          phone: formData.contact_phone,
+          country_code: formData.country,
+        })
+        .eq('id', userData.user.id);
+
+      if (profileError) throw profileError;
+
+      // Partner record should be auto-created by trigger, but let's verify
+      const { error: partnerError } = await supabase
+        .from('partners')
+        .update({
+          company_name: formData.company_name,
+          contact_person: formData.contact_person,
+          contact_email: formData.email,
+          contact_phone: formData.contact_phone,
+          country: formData.country,
+          city: formData.city,
+          address: formData.address,
+        })
+        .eq('id', userData.user.id);
+
+      if (partnerError) throw partnerError;
+
+      return userData.user;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'ecp-partners'] });
+      toast({
+        title: 'Partner Created',
+        description: 'ECP partner has been successfully created. They will receive login credentials via email.'
+      });
+      setAddPartnerDialogOpen(false);
+      setNewPartnerForm({
+        email: '',
+        company_name: '',
+        contact_person: '',
+        contact_phone: '',
+        country: '',
+        city: '',
+        address: '',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Error Creating Partner',
+        description: error.message,
+        variant: 'destructive'
+      });
+    },
+  });
+
+  const reviewVoucherMutation = useMutation({
+    mutationFn: async ({ requestId, status, adminNotes }: { requestId: string; status: string; adminNotes?: string }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      const { error } = await supabase
+        .from('ecp_voucher_requests')
+        .update({
+          status,
+          admin_notes: adminNotes,
+          reviewed_by: user?.id,
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq('id', requestId);
+
+      if (error) throw error;
+
+      // If approved, create the vouchers
+      if (status === 'approved') {
+        const request = voucherRequests?.find((r) => r.id === requestId);
+        if (request) {
+          // Create vouchers for the partner
+          const vouchers = Array(request.quantity).fill(null).map(() => ({
+            partner_id: request.partner_id,
+            certification_type: request.certification_type,
+            voucher_code: `ECP-${request.certification_type}-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+            status: 'available',
+            valid_until: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // 1 year validity
+          }));
+
+          const { error: voucherError } = await supabase
+            .from('ecp_vouchers')
+            .insert(vouchers);
+
+          if (voucherError) throw voucherError;
+        }
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'ecp-voucher-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'ecp-partners'] });
+      toast({ title: 'Request Updated', description: 'Voucher request has been processed.' });
+      setReviewVoucherDialogOpen(false);
+      setSelectedVoucherRequest(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const reviewTrainerMutation = useMutation({
+    mutationFn: async ({ trainerId, status, notes }: { trainerId: string; status: string; notes?: string }) => {
+      const { error } = await supabase
+        .from('ecp_trainers')
+        .update({
+          status,
+          // Could add admin_notes field if needed
+        })
+        .eq('id', trainerId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'ecp-trainers'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'ecp-partners'] });
+      toast({ title: 'Trainer Updated', description: 'Trainer status has been updated.' });
+      setReviewTrainerDialogOpen(false);
+      setSelectedTrainer(null);
+      setRejectionReason('');
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  // Stats calculations
+  const totalPartners = partners?.length || 0;
+  const totalVouchers = partners?.reduce((sum, p) => sum + p.vouchers_total, 0) || 0;
+  const usedVouchers = partners?.reduce((sum, p) => sum + p.vouchers_used, 0) || 0;
+  const pendingVoucherRequests = voucherRequests?.filter((r) => r.status === 'pending').length || 0;
+  const pendingTrainerApps = trainers?.filter((t) => t.status === 'pending').length || 0;
+
+  // Filtered data
+  const filteredPartners = partners?.filter((p) => {
+    const name = p.company_name || `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.email;
+    const matchesSearch = name.toLowerCase().includes(search.toLowerCase()) ||
+      p.email.toLowerCase().includes(search.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || p.license_status === statusFilter;
+    return matchesSearch && matchesStatus;
+  }) || [];
+
+  const getPartnerName = (partner: any) => {
+    return partner?.company_name ||
+      `${partner?.first_name || ''} ${partner?.last_name || ''}`.trim() ||
+      partner?.email || 'Unknown';
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  };
+
+  if (partnersError) {
+    return (
+      <div className="space-y-6">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>{t('ecp.errorLoadingData')}</AlertTitle>
+          <AlertDescription>
+            {t('ecp.unableToLoad')}
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-sky-500 via-royal-600 to-navy-800 rounded-lg p-6 text-white">
+        <div className="flex items-center gap-3">
+          <Building2 className="h-8 w-8" />
+          <div>
+            <h1 className="text-3xl font-bold">{t('ecp.title')}</h1>
+            <p className="mt-2 opacity-90">
+              {t('ecp.subtitle')}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats Overview */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">{t('ecp.totalPartners')}</p>
+                <p className="text-3xl font-bold">{totalPartners}</p>
+              </div>
+              <Building2 className="h-8 w-8 text-purple-600" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">{t('ecp.vouchersAllocated')}</p>
+                <p className="text-3xl font-bold">{totalVouchers}</p>
+                <p className="text-sm text-green-600">{usedVouchers} {t('ecp.used')}</p>
+              </div>
+              <Ticket className="h-8 w-8 text-blue-600" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className={pendingVoucherRequests > 0 ? 'border-amber-200' : ''}>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">{t('ecp.pendingVoucherRequests')}</p>
+                <p className="text-3xl font-bold text-amber-600">{pendingVoucherRequests}</p>
+              </div>
+              <Clock className="h-8 w-8 text-amber-600" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className={pendingTrainerApps > 0 ? 'border-orange-200' : ''}>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">{t('ecp.trainerApplications')}</p>
+                <p className="text-3xl font-bold text-orange-600">{pendingTrainerApps}</p>
+              </div>
+              <UserCheck className="h-8 w-8 text-orange-600" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Main Content Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="partners">{t('ecp.ecpPartnersTab')}</TabsTrigger>
+          <TabsTrigger value="vouchers">
+            {t('ecp.voucherRequestsTab')}
+            {pendingVoucherRequests > 0 && (
+              <Badge className="ml-2 bg-amber-500">{pendingVoucherRequests}</Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="trainers">
+            {t('ecp.trainerApprovalsTab')}
+            {pendingTrainerApps > 0 && (
+              <Badge className="ml-2 bg-orange-500">{pendingTrainerApps}</Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Partners Tab */}
+        <TabsContent value="partners" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>{t('ecp.ecpPartnersTab')}</CardTitle>
+                  <CardDescription>{t('ecp.manageDescription')}</CardDescription>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => navigate('/admin/users/bulk-upload')}
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    {t('ecp.bulkUpload')}
+                  </Button>
+                  <Button
+                    onClick={() => setAddPartnerDialogOpen(true)}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    {t('ecp.addPartner')}
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {/* Filters */}
+              <div className="flex gap-4 mb-4">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder={t('ecp.searchPlaceholder')}
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder={t('table.status')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t('ecp.allStatus')}</SelectItem>
+                    <SelectItem value="active">{t('common.active')}</SelectItem>
+                    <SelectItem value="suspended">{t('ecp.suspended')}</SelectItem>
+                    <SelectItem value="pending">{t('ecp.pending')}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Partners Table */}
+              {partnersLoading ? (
+                <div className="space-y-4">
+                  {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-16 w-full" />
+                  ))}
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t('partners.partner')}</TableHead>
+                      <TableHead>{t('common.country')}</TableHead>
+                      <TableHead>{t('table.status')}</TableHead>
+                      <TableHead>{t('ecp.vouchers')}</TableHead>
+                      <TableHead>{t('ecp.trainers')}</TableHead>
+                      <TableHead>{t('ecp.trainees')}</TableHead>
+                      <TableHead>{t('table.actions')}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredPartners.length > 0 ? (
+                      filteredPartners.map((partner) => (
+                        <TableRow key={partner.id}>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{getPartnerName(partner)}</p>
+                              <p className="text-sm text-gray-500">{partner.email}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell>{partner.country_code || '-'}</TableCell>
+                          <TableCell>
+                            <Badge
+                              className={
+                                partner.license_status === "active"
+                                  ? "bg-green-100 text-green-700"
+                                  : partner.license_status === "suspended"
+                                  ? "bg-red-100 text-red-700"
+                                  : "bg-amber-100 text-amber-700"
+                              }
+                            >
+                              {partner.license_status === 'active' ? t('common.active') : partner.license_status === 'suspended' ? t('ecp.suspended') : t('ecp.pending')}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              <span className="font-medium">{partner.vouchers_used}</span>
+                              <span className="text-gray-500">/{partner.vouchers_total}</span>
+                            </div>
+                            {partner.vouchers_total > 0 && (
+                              <Progress
+                                value={(partner.vouchers_used / partner.vouchers_total) * 100}
+                                className="h-1 mt-1"
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              <span className="font-medium">{partner.trainers_approved}</span>
+                              {partner.trainers_pending > 0 && (
+                                <Badge variant="outline" className="text-xs">
+                                  +{partner.trainers_pending} {t('ecp.pending')}
+                                </Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>{partner.trainees_total}</TableCell>
+                          <TableCell>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => navigate(`/admin/ecp/${partner.id}`)}>
+                                  <Eye className="h-4 w-4 mr-2" />
+                                  {t('ecp.viewDetails')}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => navigate(`/admin/ecp/${partner.id}/vouchers`)}>
+                                  <Ticket className="h-4 w-4 mr-2" />
+                                  {t('ecp.allocateVouchers')}
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                          {t('ecp.noPartnersFound')}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Voucher Requests Tab */}
+        <TabsContent value="vouchers" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('ecp.voucherRequests')}</CardTitle>
+              <CardDescription>{t('ecp.voucherRequestsDescription')}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {requestsLoading ? (
+                <div className="space-y-4">
+                  {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-16 w-full" />
+                  ))}
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t('partners.partner')}</TableHead>
+                      <TableHead>{t('ecp.type')}</TableHead>
+                      <TableHead>{t('ecp.quantity')}</TableHead>
+                      <TableHead>{t('ecp.amount')}</TableHead>
+                      <TableHead>{t('ecp.requested')}</TableHead>
+                      <TableHead>{t('table.status')}</TableHead>
+                      <TableHead>{t('table.actions')}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {voucherRequests && voucherRequests.length > 0 ? (
+                      voucherRequests.map((request) => (
+                        <TableRow key={request.id}>
+                          <TableCell className="font-medium">
+                            {getPartnerName(request.partner)}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{request.certification_type}</Badge>
+                          </TableCell>
+                          <TableCell>{request.quantity}</TableCell>
+                          <TableCell>${request.total_amount?.toFixed(2) || '-'}</TableCell>
+                          <TableCell>{formatDate(request.created_at)}</TableCell>
+                          <TableCell>
+                            <Badge
+                              className={
+                                request.status === "approved"
+                                  ? "bg-green-100 text-green-700"
+                                  : request.status === "rejected"
+                                  ? "bg-red-100 text-red-700"
+                                  : "bg-amber-100 text-amber-700"
+                              }
+                            >
+                              {request.status === 'approved' ? t('ecp.approve') : request.status === 'rejected' ? t('ecp.reject') : t('ecp.pending')}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {request.status === "pending" && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedVoucherRequest(request);
+                                  setReviewVoucherDialogOpen(true);
+                                }}
+                              >
+                                {t('ecp.review')}
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                          {t('ecp.noVoucherRequests')}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Trainer Approvals Tab */}
+        <TabsContent value="trainers" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('ecp.trainerApplicationsTitle')}</CardTitle>
+              <CardDescription>{t('ecp.trainerApplicationsDescription')}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {trainersLoading ? (
+                <div className="space-y-4">
+                  {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-16 w-full" />
+                  ))}
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t('ecp.trainer')}</TableHead>
+                      <TableHead>{t('partners.partner')}</TableHead>
+                      <TableHead>{t('ecp.certifications')}</TableHead>
+                      <TableHead>{t('ecp.submitted')}</TableHead>
+                      <TableHead>{t('table.status')}</TableHead>
+                      <TableHead>{t('table.actions')}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {trainers && trainers.length > 0 ? (
+                      trainers.map((trainer) => (
+                        <TableRow key={trainer.id}>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{trainer.first_name} {trainer.last_name}</p>
+                              <p className="text-sm text-gray-500">{trainer.email}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell>{trainer.partner?.company_name || trainer.partner?.email || '-'}</TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              {trainer.certifications?.map((cert: string) => (
+                                <Badge key={cert} variant="outline" className="text-xs">
+                                  {cert}
+                                </Badge>
+                              ))}
+                            </div>
+                          </TableCell>
+                          <TableCell>{formatDate(trainer.created_at)}</TableCell>
+                          <TableCell>
+                            <Badge
+                              className={
+                                trainer.status === "approved"
+                                  ? "bg-green-100 text-green-700"
+                                  : trainer.status === "suspended" || trainer.status === "inactive"
+                                  ? "bg-red-100 text-red-700"
+                                  : "bg-amber-100 text-amber-700"
+                              }
+                            >
+                              {trainer.status === 'approved' ? t('ecp.approve') : trainer.status === 'suspended' || trainer.status === 'inactive' ? t('ecp.suspended') : t('ecp.pending')}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {trainer.status === "pending" && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedTrainer(trainer);
+                                  setReviewTrainerDialogOpen(true);
+                                }}
+                              >
+                                {t('ecp.review')}
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                          {t('ecp.noTrainerApplications')}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* Review Voucher Request Dialog */}
+      <Dialog open={reviewVoucherDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          // Force cleanup cursor issue
+          document.body.style.pointerEvents = '';
+          document.body.style.overflow = '';
+          setSelectedVoucherRequest(null);
+        }
+        setReviewVoucherDialogOpen(open);
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('ecp.reviewVoucherRequest')}</DialogTitle>
+            <DialogDescription>
+              {t('ecp.requestFrom')} {getPartnerName(selectedVoucherRequest?.partner)}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <p className="text-sm text-gray-600">{t('ecp.quantityRequested')}</p>
+                <p className="text-2xl font-bold">{selectedVoucherRequest?.quantity}</p>
+              </div>
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <p className="text-sm text-gray-600">{t('ecp.certificationType')}</p>
+                <p className="text-2xl font-bold">{selectedVoucherRequest?.certification_type}</p>
+              </div>
+            </div>
+            <div className="p-4 border rounded-lg">
+              <p className="text-sm text-gray-600 mb-1">{t('ecp.totalAmount')}</p>
+              <p className="text-xl font-bold text-gray-900">
+                ${selectedVoucherRequest?.total_amount?.toFixed(2) || '0.00'}
+              </p>
+              <p className="text-sm text-gray-500">
+                {t('ecp.paymentMethod')}: {selectedVoucherRequest?.payment_method || t('ecp.invoice')}
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => reviewVoucherMutation.mutate({
+                requestId: selectedVoucherRequest!.id,
+                status: 'rejected',
+              })}
+              disabled={reviewVoucherMutation.isPending}
+            >
+              <XCircle className="h-4 w-4 mr-2" />
+              {t('ecp.reject')}
+            </Button>
+            <Button
+              onClick={() => reviewVoucherMutation.mutate({
+                requestId: selectedVoucherRequest!.id,
+                status: 'approved',
+              })}
+              disabled={reviewVoucherMutation.isPending}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {reviewVoucherMutation.isPending && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              )}
+              <CheckCircle className="h-4 w-4 mr-2" />
+              {t('ecp.approve')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Review Trainer Dialog */}
+      <Dialog open={reviewTrainerDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          // Force cleanup cursor issue
+          document.body.style.pointerEvents = '';
+          document.body.style.overflow = '';
+          setSelectedTrainer(null);
+          setRejectionReason('');
+        }
+        setReviewTrainerDialogOpen(open);
+      }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t('ecp.reviewTrainerApplication')}</DialogTitle>
+            <DialogDescription>
+              {t('ecp.applicationFor')} {selectedTrainer?.first_name} {selectedTrainer?.last_name}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label className="text-gray-500">{t('partners.partner')}</Label>
+                <p className="font-medium">
+                  {selectedTrainer?.partner?.company_name || selectedTrainer?.partner?.email || '-'}
+                </p>
+              </div>
+              <div>
+                <Label className="text-gray-500">{t('common.email')}</Label>
+                <p className="font-medium">{selectedTrainer?.email}</p>
+              </div>
+              <div className="col-span-2">
+                <Label className="text-gray-500">{t('ecp.certifications')}</Label>
+                <div className="flex gap-1 mt-1">
+                  {selectedTrainer?.certifications?.map((cert: string) => (
+                    <Badge key={cert} variant="outline">
+                      {cert}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {selectedTrainer?.bio && (
+              <div>
+                <Label className="text-gray-500">{t('ecp.bio')}</Label>
+                <p className="text-sm text-gray-700 mt-1">{selectedTrainer.bio}</p>
+              </div>
+            )}
+
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>{t('ecp.reviewChecklist')}</AlertTitle>
+              <AlertDescription>
+                <ul className="text-sm mt-2 space-y-1">
+                  <li>- {t('ecp.verifyCertifications')}</li>
+                  <li>- {t('ecp.checkExperience')}</li>
+                  <li>- {t('ecp.reviewDeliveryExperience')}</li>
+                </ul>
+              </AlertDescription>
+            </Alert>
+
+            <div className="space-y-2">
+              <Label>{t('ecp.rejectionReason')}</Label>
+              <Textarea
+                placeholder={t('ecp.rejectionReasonPlaceholder')}
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => reviewTrainerMutation.mutate({
+                trainerId: selectedTrainer!.id,
+                status: 'inactive',
+                notes: rejectionReason,
+              })}
+              disabled={!rejectionReason || reviewTrainerMutation.isPending}
+              className="text-red-600"
+            >
+              <XCircle className="h-4 w-4 mr-2" />
+              {t('ecp.reject')}
+            </Button>
+            <Button
+              onClick={() => reviewTrainerMutation.mutate({
+                trainerId: selectedTrainer!.id,
+                status: 'approved',
+              })}
+              disabled={reviewTrainerMutation.isPending}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {reviewTrainerMutation.isPending && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              )}
+              <CheckCircle className="h-4 w-4 mr-2" />
+              {t('ecp.approveTrainer')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Partner Dialog */}
+      <Dialog open={addPartnerDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setNewPartnerForm({
+            email: '',
+            company_name: '',
+            contact_person: '',
+            contact_phone: '',
+            country: '',
+            city: '',
+            address: '',
+          });
+        }
+        setAddPartnerDialogOpen(open);
+      }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{t('ecp.addNewECPPartner')}</DialogTitle>
+            <DialogDescription>
+              {t('ecp.createNewPartnerDescription')}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="col-span-2">
+              <Label htmlFor="email">{t('common.email')} *</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="partner@example.com"
+                value={newPartnerForm.email}
+                onChange={(e) => setNewPartnerForm({ ...newPartnerForm, email: e.target.value })}
+                required
+              />
+            </div>
+            <div className="col-span-2">
+              <Label htmlFor="company_name">{t('ecp.companyName')} *</Label>
+              <Input
+                id="company_name"
+                placeholder="Acme Training Center"
+                value={newPartnerForm.company_name}
+                onChange={(e) => setNewPartnerForm({ ...newPartnerForm, company_name: e.target.value })}
+                required
+              />
+            </div>
+            <div className="col-span-2">
+              <Label htmlFor="contact_person">{t('ecp.contactPerson')} *</Label>
+              <Input
+                id="contact_person"
+                placeholder="John Smith"
+                value={newPartnerForm.contact_person}
+                onChange={(e) => setNewPartnerForm({ ...newPartnerForm, contact_person: e.target.value })}
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="contact_phone">{t('ecp.phoneNumber')}</Label>
+              <Input
+                id="contact_phone"
+                placeholder="+1234567890"
+                value={newPartnerForm.contact_phone}
+                onChange={(e) => setNewPartnerForm({ ...newPartnerForm, contact_phone: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label htmlFor="country">{t('ecp.countryCode')}</Label>
+              <Input
+                id="country"
+                placeholder="US"
+                maxLength={2}
+                value={newPartnerForm.country}
+                onChange={(e) => setNewPartnerForm({ ...newPartnerForm, country: e.target.value.toUpperCase() })}
+              />
+            </div>
+            <div>
+              <Label htmlFor="city">{t('ecp.city')}</Label>
+              <Input
+                id="city"
+                placeholder="New York"
+                value={newPartnerForm.city}
+                onChange={(e) => setNewPartnerForm({ ...newPartnerForm, city: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label htmlFor="address">{t('ecp.address')}</Label>
+              <Input
+                id="address"
+                placeholder="123 Main St"
+                value={newPartnerForm.address}
+                onChange={(e) => setNewPartnerForm({ ...newPartnerForm, address: e.target.value })}
+              />
+            </div>
+          </div>
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              {t('ecp.accountCreationNote')}
+            </AlertDescription>
+          </Alert>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setAddPartnerDialogOpen(false)}
+              disabled={createPartnerMutation.isPending}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              onClick={() => createPartnerMutation.mutate(newPartnerForm)}
+              disabled={
+                !newPartnerForm.email ||
+                !newPartnerForm.company_name ||
+                !newPartnerForm.contact_person ||
+                createPartnerMutation.isPending
+              }
+            >
+              {createPartnerMutation.isPending && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              )}
+              <Plus className="h-4 w-4 mr-2" />
+              {t('ecp.createPartner')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

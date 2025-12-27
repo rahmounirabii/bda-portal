@@ -1,0 +1,19 @@
+-- Allow users to view profiles of agents assigned to their support tickets
+-- This enables the support ticket page to display agent information
+
+CREATE POLICY "Users can view agents assigned to their tickets"
+ON public.users
+FOR SELECT
+TO public
+USING (
+  -- Allow viewing if this user is assigned as an agent to any of the requester's tickets
+  EXISTS (
+    SELECT 1
+    FROM support_tickets
+    WHERE support_tickets.assigned_to = users.id
+      AND support_tickets.user_id = auth.uid()
+  )
+);
+
+COMMENT ON POLICY "Users can view agents assigned to their tickets" ON public.users IS
+  'Allows users to view basic profile information of support agents assigned to their tickets';
