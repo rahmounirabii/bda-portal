@@ -70,7 +70,7 @@ jobs:
           overwrite: true
 
       - name: Notify deployment success
-        run: echo "✅ Portal deployed successfully"
+        run: echo "Portal deployed successfully"
 
   # ============================================================================
   # Deploy Supabase Edge Functions
@@ -96,7 +96,7 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
       - name: Notify Supabase deployment
-        run: echo "✅ Supabase functions deployed"
+        run: echo "Supabase functions deployed"
 
   # ============================================================================
   # Deploy WordPress Theme (inc folder)
@@ -133,4 +133,4 @@ jobs:
           overwrite: true
 
       - name: Notify WordPress deployment
-        run: echo "✅ WordPress theme deployed"
+        run: echo "WordPress theme deployed"
