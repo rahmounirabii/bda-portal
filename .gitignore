@@ -27,3 +27,6 @@ dist-ssr
 node_modules/
 dist/
 .env
+
+# Deploy credentials
+.env.deploy
