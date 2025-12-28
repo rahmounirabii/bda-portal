@@ -34,8 +34,8 @@ warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
 deploy_portal() {
-    log "Building portal..."
-    npm run build:client || error "Build failed"
+    log "Building portal (production)..."
+    npm run build:static || error "Build failed"
 
     log "Deploying portal to $SSH_HOST..."
     sshpass -p "$SSH_PASS" scp -P $SSH_PORT -o StrictHostKeyChecking=no -r dist/spa/* ${SSH_USER}@${SSH_HOST}:${PORTAL_PATH}
