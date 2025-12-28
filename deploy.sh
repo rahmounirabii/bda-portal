@@ -19,6 +19,10 @@ fi
 PORTAL_PATH="~/domains/bda-global.org/public_html/portal/"
 WP_THEME_PATH="~/domains/bda-global.org/public_html/wp-content/themes/jupiterx/"
 
+# Local paths
+LOCAL_WP_INC="/home/rr/Projets/FL/MSTQL/bda-association/public_html/wp-content/themes/jupiterx/inc"
+LOCAL_WP_FUNCTIONS="/home/rr/Projets/FL/MSTQL/bda-association/public_html/wp-content/themes/jupiterx/functions.php"
+
 # Colors
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -40,13 +44,13 @@ deploy_portal() {
 }
 
 deploy_wordpress() {
-    log "Deploying WordPress theme files..."
+    log "Deploying WordPress theme files from $LOCAL_WP_INC..."
 
     # Deploy inc folder
-    sshpass -p "$SSH_PASS" scp -P $SSH_PORT -o StrictHostKeyChecking=no -r wordpress/themes/jupiterx/inc/* ${SSH_USER}@${SSH_HOST}:${WP_THEME_PATH}inc/
+    sshpass -p "$SSH_PASS" scp -P $SSH_PORT -o StrictHostKeyChecking=no -r ${LOCAL_WP_INC}/* ${SSH_USER}@${SSH_HOST}:${WP_THEME_PATH}inc/
 
     # Deploy functions.php
-    sshpass -p "$SSH_PASS" scp -P $SSH_PORT -o StrictHostKeyChecking=no wordpress/themes/jupiterx/functions.php ${SSH_USER}@${SSH_HOST}:${WP_THEME_PATH}
+    sshpass -p "$SSH_PASS" scp -P $SSH_PORT -o StrictHostKeyChecking=no ${LOCAL_WP_FUNCTIONS} ${SSH_USER}@${SSH_HOST}:${WP_THEME_PATH}
 
     log "WordPress theme deployed successfully!"
 }
