@@ -171,9 +171,48 @@ export class CertificationExamService {
 
   /**
    * Supprimer un examen de certification (admin)
+   * Cascade deletes: quiz_answers -> quiz_questions -> quiz
    */
   static async deleteCertificationExam(examId: string): Promise<{ error: any }> {
     try {
+      // Step 1: Get all question IDs for this exam
+      const { data: questions, error: questionsError } = await supabase
+        .from('quiz_questions')
+        .select('id')
+        .eq('quiz_id', examId);
+
+      if (questionsError) {
+        console.error('Error fetching exam questions for deletion:', questionsError);
+        return { error: questionsError };
+      }
+
+      // Step 2: Delete all answers for these questions
+      if (questions && questions.length > 0) {
+        const questionIds = questions.map(q => q.id);
+
+        const { error: answersError } = await supabase
+          .from('quiz_answers')
+          .delete()
+          .in('question_id', questionIds);
+
+        if (answersError) {
+          console.error('Error deleting exam answers:', answersError);
+          return { error: answersError };
+        }
+      }
+
+      // Step 3: Delete all questions for this exam
+      const { error: deleteQuestionsError } = await supabase
+        .from('quiz_questions')
+        .delete()
+        .eq('quiz_id', examId);
+
+      if (deleteQuestionsError) {
+        console.error('Error deleting exam questions:', deleteQuestionsError);
+        return { error: deleteQuestionsError };
+      }
+
+      // Step 4: Delete the exam itself
       const { data, error } = await supabase
         .from('quizzes')
         .delete()

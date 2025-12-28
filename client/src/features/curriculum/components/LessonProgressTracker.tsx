@@ -1,6 +1,6 @@
 /**
  * Lesson Progress Tracker Component
- * Affiche la progression de lecture et le statut de la leçon
+ * Displays reading progress and lesson status
  */
 
 import { CheckCircle, Clock, Eye } from 'lucide-react';
@@ -32,7 +32,7 @@ export function LessonProgressTracker({
         return (
           <div className="flex items-center gap-2 text-green-600 bg-green-50 px-3 py-1.5 rounded-full">
             <CheckCircle className="h-4 w-4" />
-            <span className="text-sm font-medium">Terminée</span>
+            <span className="text-sm font-medium">Completed</span>
           </div>
         );
 
@@ -40,7 +40,7 @@ export function LessonProgressTracker({
         return (
           <div className="flex items-center gap-2 text-yellow-600 bg-yellow-50 px-3 py-1.5 rounded-full">
             <Clock className="h-4 w-4" />
-            <span className="text-sm font-medium">Quiz en attente</span>
+            <span className="text-sm font-medium">Quiz Pending</span>
           </div>
         );
 
@@ -48,7 +48,7 @@ export function LessonProgressTracker({
         return (
           <div className="flex items-center gap-2 text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full">
             <Eye className="h-4 w-4" />
-            <span className="text-sm font-medium">En cours</span>
+            <span className="text-sm font-medium">In Progress</span>
           </div>
         );
 
@@ -73,7 +73,7 @@ export function LessonProgressTracker({
             </div>
           </TooltipTrigger>
           <TooltipContent>
-            <p>Progression de lecture</p>
+            <p>Reading Progress</p>
           </TooltipContent>
         </Tooltip>
 
@@ -86,14 +86,14 @@ export function LessonProgressTracker({
             <TooltipTrigger>
               <div className="flex items-center gap-1 text-sm text-muted-foreground">
                 <span className="font-medium">{progress.best_quiz_score}%</span>
-                <span>au quiz</span>
+                <span>quiz score</span>
               </div>
             </TooltipTrigger>
             <TooltipContent>
-              <p>Meilleur score au quiz</p>
+              <p>Best quiz score</p>
               {progress.quiz_attempts_count > 1 && (
                 <p className="text-xs mt-1">
-                  {progress.quiz_attempts_count} tentatives
+                  {progress.quiz_attempts_count} attempts
                 </p>
               )}
             </TooltipContent>

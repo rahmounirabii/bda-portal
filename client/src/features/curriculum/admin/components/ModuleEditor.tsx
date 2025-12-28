@@ -4,6 +4,7 @@ import { ArrowLeft, Save, X, Trash2 } from 'lucide-react';
 import { CurriculumService, curriculumKeys } from '@/entities/curriculum';
 import { RichTextEditor } from './RichTextEditor';
 import { useToast } from '@/components/ui/use-toast';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { CurriculumModule, RichContent, CertificationType, SectionType } from '@/entities/curriculum';
 
 interface ModuleEditorProps {
@@ -20,18 +21,26 @@ export function ModuleEditor({ moduleId, onClose }: ModuleEditorProps) {
   const { toast } = useToast();
   const isEditing = !!moduleId;
 
-  // Form state
+  // Form state - English
   const [competencyName, setCompetencyName] = useState('');
+  const [competencyNameAr, setCompetencyNameAr] = useState('');
   const [sectionType, setSectionType] = useState<SectionType>('knowledge_based');
   const [certificationType, setCertificationType] = useState<CertificationType>('CP');
   const [orderIndex, setOrderIndex] = useState<number>(1);
   const [estimatedMinutes, setEstimatedMinutes] = useState(30);
   const [content, setContent] = useState<RichContent | null>(null);
+  const [contentAr, setContentAr] = useState<RichContent | null>(null);
+  const [description, setDescription] = useState('');
+  const [descriptionAr, setDescriptionAr] = useState('');
   const [learningObjectives, setLearningObjectives] = useState<string[]>(['']);
+  const [learningObjectivesAr, setLearningObjectivesAr] = useState<string[]>(['']);
   const [quizId, setQuizId] = useState<string>('');
   const [prerequisiteModuleId, setPrerequisiteModuleId] = useState<string>('');
   const [quizPassingScore, setQuizPassingScore] = useState(70);
   const [isPublished, setIsPublished] = useState(false);
+
+  // Language tab state
+  const [activeLanguageTab, setActiveLanguageTab] = useState<'en' | 'ar'>('en');
 
   // Fetch existing module if editing
   const { data: module, isLoading: isLoadingModule } = useQuery({
@@ -71,12 +80,17 @@ export function ModuleEditor({ moduleId, onClose }: ModuleEditorProps) {
   useEffect(() => {
     if (module) {
       setCompetencyName(module.competency_name);
-      setSectionType(module.section_type);
+      setCompetencyNameAr(module.competency_name_ar || '');
+      setSectionType(module.section_type as SectionType);
       setCertificationType(module.certification_type);
       setOrderIndex(module.order_index);
       setEstimatedMinutes(module.estimated_minutes || 30);
-      setContent(module.content);
+      setContent(module.content as RichContent | null);
+      setContentAr(module.content_ar as RichContent | null);
+      setDescription(module.description || '');
+      setDescriptionAr(module.description_ar || '');
       setLearningObjectives(module.learning_objectives || ['']);
+      setLearningObjectivesAr(module.learning_objectives_ar || ['']);
       setQuizId(module.quiz_id || '');
       setPrerequisiteModuleId(module.prerequisite_module_id || '');
       setQuizPassingScore(module.quiz_passing_score);
@@ -101,12 +115,17 @@ export function ModuleEditor({ moduleId, onClose }: ModuleEditorProps) {
     mutationFn: async () => {
       const moduleData = {
         competency_name: competencyName,
+        competency_name_ar: competencyNameAr || null,
         section_type: sectionType,
         certification_type: certificationType,
         order_index: orderIndex,
         estimated_minutes: estimatedMinutes,
         content: content || {},
+        content_ar: contentAr || null,
+        description: description || null,
+        description_ar: descriptionAr || null,
         learning_objectives: learningObjectives.filter((obj) => obj.trim() !== ''),
+        learning_objectives_ar: learningObjectivesAr.filter((obj) => obj.trim() !== ''),
         quiz_id: quizId || null,
         prerequisite_module_id: prerequisiteModuleId || null,
         quiz_passing_score: quizPassingScore,
@@ -144,6 +163,7 @@ export function ModuleEditor({ moduleId, onClose }: ModuleEditorProps) {
     },
   });
 
+  // English learning objectives handlers
   const handleAddObjective = () => {
     setLearningObjectives([...learningObjectives, '']);
   };
@@ -156,6 +176,21 @@ export function ModuleEditor({ moduleId, onClose }: ModuleEditorProps) {
 
   const handleRemoveObjective = (index: number) => {
     setLearningObjectives(learningObjectives.filter((_, i) => i !== index));
+  };
+
+  // Arabic learning objectives handlers
+  const handleAddObjectiveAr = () => {
+    setLearningObjectivesAr([...learningObjectivesAr, '']);
+  };
+
+  const handleUpdateObjectiveAr = (index: number, value: string) => {
+    const updated = [...learningObjectivesAr];
+    updated[index] = value;
+    setLearningObjectivesAr(updated);
+  };
+
+  const handleRemoveObjectiveAr = (index: number) => {
+    setLearningObjectivesAr(learningObjectivesAr.filter((_, i) => i !== index));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -196,26 +231,11 @@ export function ModuleEditor({ moduleId, onClose }: ModuleEditorProps) {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Basic Information */}
+        {/* Basic Settings (Non-language specific) */}
         <div className="bg-white rounded-lg shadow-sm p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Basic Information</h2>
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Basic Settings</h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Competency Name */}
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Competency Name *
-              </label>
-              <input
-                type="text"
-                value={competencyName}
-                onChange={(e) => setCompetencyName(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="e.g., Business Analysis Planning and Monitoring"
-                required
-              />
-            </div>
-
             {/* Section Type */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -223,12 +243,12 @@ export function ModuleEditor({ moduleId, onClose }: ModuleEditorProps) {
               </label>
               <select
                 value={sectionType}
-                onChange={(e) => setSectionType(e.target.value as ModuleSectionType)}
+                onChange={(e) => setSectionType(e.target.value as SectionType)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 required
               >
-                <option value="knowledge_based">🧠 Knowledge-Based</option>
-                <option value="behavioral">💼 Behavioral</option>
+                <option value="knowledge_based">Knowledge-Based</option>
+                <option value="behavioral">Behavioral</option>
               </select>
             </div>
 
@@ -284,52 +304,195 @@ export function ModuleEditor({ moduleId, onClose }: ModuleEditorProps) {
           </div>
         </div>
 
-        {/* Learning Objectives */}
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-gray-900">Learning Objectives</h2>
-            <button
-              type="button"
-              onClick={handleAddObjective}
-              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-            >
-              Add Objective
-            </button>
-          </div>
-
-          <div className="space-y-3">
-            {learningObjectives.map((objective, index) => (
-              <div key={index} className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={objective}
-                  onChange={(e) => handleUpdateObjective(index, e.target.value)}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder={`Learning objective ${index + 1}`}
-                />
-                {learningObjectives.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveObjective(index)}
-                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                    title="Remove"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Content Editor */}
+        {/* Language-Specific Content with EN/AR Tabs */}
         <div className="bg-white rounded-lg shadow-sm p-6">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Module Content</h2>
-          <RichTextEditor
-            content={content}
-            onChange={setContent}
-            placeholder="Write the module content here. Use the toolbar to format text, add headings, lists, images, etc."
-          />
+
+          <Tabs value={activeLanguageTab} onValueChange={(v) => setActiveLanguageTab(v as 'en' | 'ar')} className="w-full">
+            <TabsList className="grid w-full grid-cols-2 mb-6">
+              <TabsTrigger
+                value="en"
+                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white"
+              >
+                English Version
+              </TabsTrigger>
+              <TabsTrigger
+                value="ar"
+                className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white"
+              >
+                Arabic Version
+              </TabsTrigger>
+            </TabsList>
+
+            {/* English Content Tab */}
+            <TabsContent value="en" className="space-y-6">
+              {/* Competency Name (English) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Competency Name (English) *
+                </label>
+                <input
+                  type="text"
+                  value={competencyName}
+                  onChange={(e) => setCompetencyName(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="e.g., Business Analysis Planning and Monitoring"
+                  required
+                />
+              </div>
+
+              {/* Description (English) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Description (English)
+                </label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Brief description of this module..."
+                  rows={3}
+                />
+              </div>
+
+              {/* Learning Objectives (English) */}
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Learning Objectives (English)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleAddObjective}
+                    className="px-3 py-1 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                  >
+                    Add Objective
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {learningObjectives.map((objective, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={objective}
+                        onChange={(e) => handleUpdateObjective(index, e.target.value)}
+                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder={`Learning objective ${index + 1}`}
+                      />
+                      {learningObjectives.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveObjective(index)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+                          title="Remove"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Content Editor (English) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Module Content (English)
+                </label>
+                <RichTextEditor
+                  content={content}
+                  onChange={setContent}
+                  placeholder="Write the module content here. Use the toolbar to format text, add headings, lists, images, etc."
+                />
+              </div>
+            </TabsContent>
+
+            {/* Arabic Content Tab */}
+            <TabsContent value="ar" className="space-y-6">
+              {/* Competency Name (Arabic) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Competency Name (Arabic)
+                </label>
+                <input
+                  type="text"
+                  value={competencyNameAr}
+                  onChange={(e) => setCompetencyNameAr(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  placeholder="اسم الكفاءة بالعربية"
+                  dir="rtl"
+                />
+              </div>
+
+              {/* Description (Arabic) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Description (Arabic)
+                </label>
+                <textarea
+                  value={descriptionAr}
+                  onChange={(e) => setDescriptionAr(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  placeholder="وصف مختصر لهذه الوحدة..."
+                  rows={3}
+                  dir="rtl"
+                />
+              </div>
+
+              {/* Learning Objectives (Arabic) */}
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Learning Objectives (Arabic)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleAddObjectiveAr}
+                    className="px-3 py-1 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition"
+                  >
+                    Add Objective
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {learningObjectivesAr.map((objective, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={objective}
+                        onChange={(e) => handleUpdateObjectiveAr(index, e.target.value)}
+                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                        placeholder={`هدف التعلم ${index + 1}`}
+                        dir="rtl"
+                      />
+                      {learningObjectivesAr.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveObjectiveAr(index)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+                          title="Remove"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Content Editor (Arabic) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Module Content (Arabic)
+                </label>
+                <RichTextEditor
+                  content={contentAr}
+                  onChange={setContentAr}
+                  placeholder="اكتب محتوى الوحدة هنا..."
+                  dir="rtl"
+                />
+              </div>
+            </TabsContent>
+          </Tabs>
         </div>
 
         {/* Quiz & Prerequisites */}

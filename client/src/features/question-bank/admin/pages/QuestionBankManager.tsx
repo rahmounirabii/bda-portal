@@ -37,6 +37,12 @@ import {
   Download,
   Upload,
   CheckCircle,
+  List,
+  Network,
+  ChevronRight,
+  ChevronDown,
+  Folder,
+  FolderOpen,
 } from 'lucide-react';
 import { AdminPageHeader, StatCard, AdminFilterCard } from '@/features/curriculum/admin/components/shared';
 import { Button } from '@/components/ui/button';
@@ -62,6 +68,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
@@ -128,6 +135,10 @@ export function QuestionBankManager() {
       enterTitleAr: 'ادخل العنوان',
       enterDescription: 'Enter description',
       titleRequired: 'Title is required',
+      descriptionArabic: 'Description (Arabic)',
+      enterDescriptionAr: 'أدخل الوصف بالعربية',
+      englishVersion: 'English Version',
+      arabicVersion: 'Arabic Version',
       createSuccess: 'Question set created successfully',
       createError: 'Failed to create question set',
       updateSuccess: 'Question set updated successfully',
@@ -137,6 +148,11 @@ export function QuestionBankManager() {
       publishSuccess: 'Question set published',
       unpublishSuccess: 'Question set unpublished',
       publishError: 'Failed to update publish status',
+      tableView: 'Table View',
+      treeView: 'Tree View',
+      expandAll: 'Expand All',
+      collapseAll: 'Collapse All',
+      noCompetency: 'Standalone Sets',
     },
     ar: {
       title: 'إدارة بنك الأسئلة',
@@ -193,6 +209,10 @@ export function QuestionBankManager() {
       enterTitleAr: 'ادخل العنوان',
       enterDescription: 'أدخل الوصف',
       titleRequired: 'العنوان مطلوب',
+      descriptionArabic: 'الوصف (بالعربية)',
+      enterDescriptionAr: 'أدخل الوصف بالعربية',
+      englishVersion: 'النسخة الإنجليزية',
+      arabicVersion: 'النسخة العربية',
       createSuccess: 'تم إنشاء مجموعة الأسئلة بنجاح',
       createError: 'فشل في إنشاء مجموعة الأسئلة',
       updateSuccess: 'تم تحديث مجموعة الأسئلة بنجاح',
@@ -202,12 +222,19 @@ export function QuestionBankManager() {
       publishSuccess: 'تم نشر مجموعة الأسئلة',
       unpublishSuccess: 'تم إلغاء نشر مجموعة الأسئلة',
       publishError: 'فشل في تحديث حالة النشر',
+      tableView: 'عرض الجدول',
+      treeView: 'عرض الشجرة',
+      expandAll: 'توسيع الكل',
+      collapseAll: 'طي الكل',
+      noCompetency: 'مجموعات مستقلة',
     }
   };
 
   const texts = t[language];
 
   // State
+  const [viewMode, setViewMode] = useState<'table' | 'tree'>('tree');
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [sectionFilter, setSectionFilter] = useState<string>('all');
   const [publishedFilter, setPublishedFilter] = useState<string>('all');
@@ -244,6 +271,43 @@ export function QuestionBankManager() {
     }
     return true;
   });
+
+  // Group sets by competency for tree view
+  const groupedSets = filteredSets?.reduce((acc, set) => {
+    const competencyKey = set.competency_id || 'standalone';
+    if (!acc[competencyKey]) {
+      acc[competencyKey] = {
+        competency: set.competency,
+        sets: [],
+      };
+    }
+    acc[competencyKey].sets.push(set);
+    return acc;
+  }, {} as Record<string, { competency: any; sets: QuestionSetWithCompetency[] }>);
+
+  // Toggle node expansion
+  const toggleNode = (nodeId: string) => {
+    setExpandedNodes((prev) => {
+      const next = new Set(prev);
+      if (next.has(nodeId)) {
+        next.delete(nodeId);
+      } else {
+        next.add(nodeId);
+      }
+      return next;
+    });
+  };
+
+  // Expand/collapse all
+  const expandAll = () => {
+    if (groupedSets) {
+      setExpandedNodes(new Set(Object.keys(groupedSets)));
+    }
+  };
+
+  const collapseAll = () => {
+    setExpandedNodes(new Set());
+  };
 
   // Handle create
   const handleCreate = async (data: QuestionSetInsert) => {
@@ -398,7 +462,153 @@ export function QuestionBankManager() {
         </Select>
       </AdminFilterCard>
 
+      {/* View Toggle and Tree Controls */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Button
+            variant={viewMode === 'table' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setViewMode('table')}
+          >
+            <List className="w-4 h-4 mr-2" />
+            {texts.tableView}
+          </Button>
+          <Button
+            variant={viewMode === 'tree' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setViewMode('tree')}
+          >
+            <Network className="w-4 h-4 mr-2" />
+            {texts.treeView}
+          </Button>
+        </div>
+        {viewMode === 'tree' && (
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={expandAll}>
+              {texts.expandAll}
+            </Button>
+            <Button variant="outline" size="sm" onClick={collapseAll}>
+              {texts.collapseAll}
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* Tree View */}
+      {viewMode === 'tree' && groupedSets && (
+        <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
+          <div className="divide-y">
+            {Object.entries(groupedSets)
+              .sort((a, b) => {
+                // Put standalone at the end
+                if (a[0] === 'standalone') return 1;
+                if (b[0] === 'standalone') return -1;
+                return (a[1].competency?.order_index || 0) - (b[1].competency?.order_index || 0);
+              })
+              .map(([key, group]) => {
+                const isExpanded = expandedNodes.has(key);
+                const competencyName = group.competency?.competency_name || texts.noCompetency;
+                const competencyOrder = group.competency?.order_index;
+
+                return (
+                  <div key={key}>
+                    {/* Competency Node */}
+                    <button
+                      onClick={() => toggleNode(key)}
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="flex items-center gap-2 flex-1">
+                        {isExpanded ? (
+                          <ChevronDown className="w-4 h-4 text-gray-400" />
+                        ) : (
+                          <ChevronRight className="w-4 h-4 text-gray-400" />
+                        )}
+                        {isExpanded ? (
+                          <FolderOpen className="w-5 h-5 text-blue-500" />
+                        ) : (
+                          <Folder className="w-5 h-5 text-blue-500" />
+                        )}
+                        <span className="font-medium text-gray-900">
+                          {competencyOrder ? `${competencyOrder}. ` : ''}{competencyName}
+                        </span>
+                        <span className="text-sm text-gray-500">
+                          ({group.sets.length} {texts.questionSets.toLowerCase()})
+                        </span>
+                      </div>
+                    </button>
+
+                    {/* Question Sets under this Competency */}
+                    {isExpanded && (
+                      <div className="pl-12 pb-2 bg-gray-50">
+                        {group.sets.map((set) => (
+                          <div
+                            key={set.id}
+                            className="flex items-center justify-between px-4 py-2 hover:bg-gray-100 rounded mx-2 transition-colors"
+                          >
+                            <div className="flex items-center gap-3">
+                              <FileQuestion className="w-4 h-4 text-green-500" />
+                              <div>
+                                <p className="font-medium text-gray-800">{set.title}</p>
+                                {set.title_ar && (
+                                  <p className="text-sm text-gray-500" dir="rtl">{set.title_ar}</p>
+                                )}
+                              </div>
+                              <span className="text-sm text-gray-500">
+                                ({set.question_count} {texts.questions.toLowerCase()})
+                              </span>
+                              <span
+                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                  set.is_published
+                                    ? 'bg-green-100 text-green-700'
+                                    : 'bg-gray-100 text-gray-700'
+                                }`}
+                              >
+                                {set.is_published ? texts.published : texts.draft}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => navigate(`/admin/question-bank/sets/${set.id}`)}
+                              >
+                                <HelpCircle className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setEditingSet(set)}
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setDeleteConfirmSet(set)}
+                              >
+                                <Trash2 className="w-4 h-4 text-red-500" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+
+          {(!groupedSets || Object.keys(groupedSets).length === 0) && (
+            <div className="text-center py-12">
+              <HelpCircle className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+              <p className="text-gray-600">{texts.noQuestionSetsFound}</p>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Question Sets Table */}
+      {viewMode === 'table' && (
       <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
         <table className="w-full">
           <thead className="bg-gray-50 border-b">
@@ -524,6 +734,7 @@ export function QuestionBankManager() {
           </div>
         )}
       </div>
+      )}
 
       {/* Create Dialog */}
       <QuestionSetDialog
@@ -677,94 +888,137 @@ function QuestionSetDialog({
             </div>
           </div>
 
-          {/* Competency Linkage */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>{texts.competencyModule}</Label>
-              <Select
-                value={formData.competency_id || 'none'}
-                onValueChange={(value) => {
-                  const newCompetencyId = value === 'none' ? null : value;
-                  setFormData({
-                    ...formData,
-                    competency_id: newCompetencyId,
-                    sub_unit_id: null, // Reset sub-unit when competency changes
-                  });
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={texts.selectCompetency} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">{texts.none}</SelectItem>
-                  {modules?.map((module) => (
-                    <SelectItem key={module.id} value={module.id}>
-                      {module.order_index}. {module.competency_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          {/* Competency Linkage - BDA BoCK Structure */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+            <h4 className="text-sm font-semibold text-blue-800 mb-3">BDA BoCK™ Structure Linkage</h4>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>{texts.competencyModule}</Label>
+                <Select
+                  value={formData.competency_id || 'none'}
+                  onValueChange={(value) => {
+                    const newCompetencyId = value === 'none' ? null : value;
+                    setFormData({
+                      ...formData,
+                      competency_id: newCompetencyId,
+                      sub_unit_id: null, // Reset sub-unit when competency changes
+                    });
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={texts.selectCompetency} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">{texts.none}</SelectItem>
+                    {modules?.map((module) => (
+                      <SelectItem key={module.id} value={module.id}>
+                        {module.order_index}. {module.competency_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>{texts.subCompetency}</Label>
+                <Select
+                  value={formData.sub_unit_id || 'none'}
+                  onValueChange={(value) =>
+                    setFormData({
+                      ...formData,
+                      sub_unit_id: value === 'none' ? null : value,
+                    })
+                  }
+                  disabled={!formData.competency_id}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={texts.selectLesson} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">{texts.noneOption}</SelectItem>
+                    {lessons?.map((lesson) => (
+                      <SelectItem key={lesson.id} value={lesson.id}>
+                        {lesson.order_index}. {lesson.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div>
-              <Label>{texts.subCompetency}</Label>
-              <Select
-                value={formData.sub_unit_id || 'none'}
-                onValueChange={(value) =>
-                  setFormData({
-                    ...formData,
-                    sub_unit_id: value === 'none' ? null : value,
-                  })
-                }
-                disabled={!formData.competency_id}
+          </div>
+
+          {/* EN/AR Language Tabs */}
+          <Tabs defaultValue="en" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 mb-4">
+              <TabsTrigger
+                value="en"
+                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white"
               >
-                <SelectTrigger>
-                  <SelectValue placeholder={texts.selectLesson} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">{texts.noneOption}</SelectItem>
-                  {lessons?.map((lesson) => (
-                    <SelectItem key={lesson.id} value={lesson.id}>
-                      {lesson.order_index}. {lesson.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+                {texts.englishVersion}
+              </TabsTrigger>
+              <TabsTrigger
+                value="ar"
+                className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white"
+              >
+                {texts.arabicVersion}
+              </TabsTrigger>
+            </TabsList>
 
-          <div>
-            <Label>{texts.titleEnglish}</Label>
-            <Input
-              value={formData.title}
-              onChange={(e) =>
-                setFormData({ ...formData, title: e.target.value })
-              }
-              placeholder={texts.enterTitle}
-            />
-          </div>
+            {/* English Tab */}
+            <TabsContent value="en" className="space-y-4">
+              <div>
+                <Label>{texts.titleEnglish}</Label>
+                <Input
+                  value={formData.title}
+                  onChange={(e) =>
+                    setFormData({ ...formData, title: e.target.value })
+                  }
+                  placeholder={texts.enterTitle}
+                />
+              </div>
 
-          <div>
-            <Label>{texts.titleArabic}</Label>
-            <Input
-              value={formData.title_ar || ''}
-              onChange={(e) =>
-                setFormData({ ...formData, title_ar: e.target.value })
-              }
-              placeholder={texts.enterTitleAr}
-              dir="rtl"
-            />
-          </div>
+              <div>
+                <Label>{texts.descriptionEnglish}</Label>
+                <Textarea
+                  value={formData.description || ''}
+                  onChange={(e) =>
+                    setFormData({ ...formData, description: e.target.value })
+                  }
+                  placeholder={texts.enterDescription}
+                  rows={3}
+                />
+              </div>
+            </TabsContent>
 
-          <div>
-            <Label>{texts.descriptionEnglish}</Label>
-            <Textarea
-              value={formData.description || ''}
-              onChange={(e) =>
-                setFormData({ ...formData, description: e.target.value })
-              }
-              placeholder={texts.enterDescription}
-            />
-          </div>
+            {/* Arabic Tab */}
+            <TabsContent value="ar" className="space-y-4">
+              <div>
+                <Label>{texts.titleArabic}</Label>
+                <Input
+                  value={formData.title_ar || ''}
+                  onChange={(e) =>
+                    setFormData({ ...formData, title_ar: e.target.value })
+                  }
+                  placeholder={texts.enterTitleAr}
+                  dir="rtl"
+                  className="text-right"
+                />
+              </div>
+
+              <div>
+                <Label>{texts.descriptionArabic}</Label>
+                <Textarea
+                  value={formData.description_ar || ''}
+                  onChange={(e) =>
+                    setFormData({ ...formData, description_ar: e.target.value })
+                  }
+                  placeholder={texts.enterDescriptionAr}
+                  dir="rtl"
+                  className="text-right"
+                  rows={3}
+                />
+              </div>
+            </TabsContent>
+          </Tabs>
 
           <div className="grid grid-cols-2 gap-4">
             <div>

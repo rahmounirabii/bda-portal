@@ -65,6 +65,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { useLanguage } from '@/contexts/LanguageContext';
 
@@ -134,6 +135,11 @@ export function FlashcardManager() {
       publishSuccess: 'Deck published',
       unpublishSuccess: 'Deck unpublished',
       publishError: 'Failed to update publish status',
+      bockLinkage: 'BDA BoCK™ Structure Linkage',
+      englishVersion: 'English Version',
+      arabicVersion: 'Arabic Version',
+      descriptionArabic: 'Description (Arabic)',
+      enterDescriptionAr: 'أدخل وصف المجموعة...',
     },
     ar: {
       title: 'إدارة البطاقات التعليمية',
@@ -196,6 +202,11 @@ export function FlashcardManager() {
       publishSuccess: 'تم نشر المجموعة',
       unpublishSuccess: 'تم إلغاء نشر المجموعة',
       publishError: 'فشل في تحديث حالة النشر',
+      bockLinkage: 'ربط هيكل BDA BoCK™',
+      englishVersion: 'النسخة الإنجليزية',
+      arabicVersion: 'النسخة العربية',
+      descriptionArabic: 'الوصف (بالعربية)',
+      enterDescriptionAr: 'أدخل وصف المجموعة...',
     }
   };
 
@@ -649,6 +660,7 @@ function DeckDialog({
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* Section Type & Order */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>{texts.sectionType}</Label>
@@ -683,95 +695,140 @@ function DeckDialog({
             </div>
           </div>
 
-          {/* Competency Linkage */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>{texts.competencyModule}</Label>
-              <Select
-                value={formData.competency_id || 'none'}
-                onValueChange={(value) => {
-                  const newCompetencyId = value === 'none' ? null : value;
-                  setFormData({
-                    ...formData,
-                    competency_id: newCompetencyId,
-                    sub_unit_id: null, // Reset sub-unit when competency changes
-                  });
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={texts.selectCompetency} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">{texts.none}</SelectItem>
-                  {modules?.map((module) => (
-                    <SelectItem key={module.id} value={module.id}>
-                      {module.order_index}. {module.competency_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          {/* BDA BoCK Structure Linkage - Highlighted */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h4 className="text-sm font-semibold text-blue-800 mb-3 flex items-center gap-2">
+              <Layers className="w-4 h-4" />
+              {texts.bockLinkage}
+            </h4>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label className="text-blue-700">{texts.competencyModule}</Label>
+                <Select
+                  value={formData.competency_id || 'none'}
+                  onValueChange={(value) => {
+                    const newCompetencyId = value === 'none' ? null : value;
+                    setFormData({
+                      ...formData,
+                      competency_id: newCompetencyId,
+                      sub_unit_id: null, // Reset sub-unit when competency changes
+                    });
+                  }}
+                >
+                  <SelectTrigger className="bg-white">
+                    <SelectValue placeholder={texts.selectCompetency} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">{texts.none}</SelectItem>
+                    {modules?.map((module) => (
+                      <SelectItem key={module.id} value={module.id}>
+                        {module.order_index}. {module.competency_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-blue-700">{texts.subCompetency}</Label>
+                <Select
+                  value={formData.sub_unit_id || 'none'}
+                  onValueChange={(value) =>
+                    setFormData({
+                      ...formData,
+                      sub_unit_id: value === 'none' ? null : value,
+                    })
+                  }
+                  disabled={!formData.competency_id}
+                >
+                  <SelectTrigger className="bg-white">
+                    <SelectValue placeholder={texts.selectLesson} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">{texts.noneOption}</SelectItem>
+                    {lessons?.map((lesson) => (
+                      <SelectItem key={lesson.id} value={lesson.id}>
+                        {lesson.order_index}. {lesson.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div>
-              <Label>{texts.subCompetency}</Label>
-              <Select
-                value={formData.sub_unit_id || 'none'}
-                onValueChange={(value) =>
-                  setFormData({
-                    ...formData,
-                    sub_unit_id: value === 'none' ? null : value,
-                  })
-                }
-                disabled={!formData.competency_id}
+          </div>
+
+          {/* EN/AR Language Tabs */}
+          <Tabs defaultValue="en" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 mb-4">
+              <TabsTrigger
+                value="en"
+                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white"
               >
-                <SelectTrigger>
-                  <SelectValue placeholder={texts.selectLesson} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">{texts.noneOption}</SelectItem>
-                  {lessons?.map((lesson) => (
-                    <SelectItem key={lesson.id} value={lesson.id}>
-                      {lesson.order_index}. {lesson.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+                {texts.englishVersion}
+              </TabsTrigger>
+              <TabsTrigger
+                value="ar"
+                className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white"
+              >
+                {texts.arabicVersion}
+              </TabsTrigger>
+            </TabsList>
 
-          <div>
-            <Label>{texts.titleEnglish}</Label>
-            <Input
-              value={formData.title}
-              onChange={(e) =>
-                setFormData({ ...formData, title: e.target.value })
-              }
-              placeholder={texts.enterTitle}
-            />
-          </div>
+            {/* English Version */}
+            <TabsContent value="en" className="space-y-4">
+              <div>
+                <Label>{texts.titleEnglish}</Label>
+                <Input
+                  value={formData.title}
+                  onChange={(e) =>
+                    setFormData({ ...formData, title: e.target.value })
+                  }
+                  placeholder={texts.enterTitle}
+                />
+              </div>
+              <div>
+                <Label>{texts.descriptionEnglish}</Label>
+                <Textarea
+                  value={formData.description || ''}
+                  onChange={(e) =>
+                    setFormData({ ...formData, description: e.target.value })
+                  }
+                  placeholder={texts.enterDescription}
+                  rows={3}
+                />
+              </div>
+            </TabsContent>
 
-          <div>
-            <Label>{texts.titleArabic}</Label>
-            <Input
-              value={formData.title_ar || ''}
-              onChange={(e) =>
-                setFormData({ ...formData, title_ar: e.target.value })
-              }
-              placeholder={texts.enterTitleAr}
-              dir="rtl"
-            />
-          </div>
+            {/* Arabic Version */}
+            <TabsContent value="ar" className="space-y-4">
+              <div>
+                <Label>{texts.titleArabic}</Label>
+                <Input
+                  value={formData.title_ar || ''}
+                  onChange={(e) =>
+                    setFormData({ ...formData, title_ar: e.target.value })
+                  }
+                  placeholder={texts.enterTitleAr}
+                  dir="rtl"
+                  className="text-right"
+                />
+              </div>
+              <div>
+                <Label>{texts.descriptionArabic}</Label>
+                <Textarea
+                  value={formData.description_ar || ''}
+                  onChange={(e) =>
+                    setFormData({ ...formData, description_ar: e.target.value })
+                  }
+                  placeholder={texts.enterDescriptionAr}
+                  dir="rtl"
+                  className="text-right"
+                  rows={3}
+                />
+              </div>
+            </TabsContent>
+          </Tabs>
 
-          <div>
-            <Label>{texts.descriptionEnglish}</Label>
-            <Textarea
-              value={formData.description || ''}
-              onChange={(e) =>
-                setFormData({ ...formData, description: e.target.value })
-              }
-              placeholder={texts.enterDescription}
-            />
-          </div>
-
+          {/* Additional Settings */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>{texts.coverImageUrl}</Label>

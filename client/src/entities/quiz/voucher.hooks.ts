@@ -339,6 +339,7 @@ export const useCreateVouchersBulk = () => {
     mutationFn: async (params: {
       emails: string;
       certification_type: string;
+      exam_language: string;
       quiz_id?: string | null;
       expires_at: string;
       admin_notes?: string | null;

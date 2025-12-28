@@ -22,6 +22,7 @@ import { DashboardRouter } from "@/components/DashboardRouter";
 // Existing pages to keep
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+import SetPassword from "./pages/auth/SetPassword";
 import NotFound from "./pages/NotFound";
 
 // Admin pages
@@ -282,6 +283,7 @@ const App = () => (
                 {/* Auth routes - no layout */}
                 <Route path="/login" element={<Login />} />
                 <Route path="/signup" element={<Signup />} />
+                <Route path="/auth/set-password" element={<SetPassword />} />
 
                 {/* Profile Completion routes - protected but NO profile guard */}
                 <Route path="/individual/complete-profile" element={

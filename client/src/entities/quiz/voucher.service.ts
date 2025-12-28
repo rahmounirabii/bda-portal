@@ -711,7 +711,7 @@ export class VoucherService {
       // Generate voucher code using database function
       const { data: codeData, error: codeError } = await supabase.rpc(
         'generate_voucher_code',
-        { cert_type: dto.certification_type }
+        { cert_type: dto.certification_type, lang: dto.exam_language || 'en' }
       );
 
       if (codeError || !codeData) {
@@ -732,6 +732,7 @@ export class VoucherService {
           code: codeData,
           user_id: dto.user_id,
           certification_type: dto.certification_type,
+          exam_language: dto.exam_language || 'en',
           quiz_id: dto.quiz_id,
           expires_at: dto.expires_at,
           woocommerce_order_id: dto.woocommerce_order_id,
@@ -773,6 +774,7 @@ export class VoucherService {
   static async createVouchersBulk(params: {
     emails: string;
     certification_type: string;
+    exam_language: string;
     quiz_id?: string | null;
     expires_at: string;
     admin_notes?: string | null;
@@ -791,10 +793,10 @@ export class VoucherService {
         };
       }
 
-      // Parse emails (comma or newline separated)
+      // Parse emails (comma or newline separated) and normalize to lowercase
       const emailList = params.emails
         .split(/[,\n]/)
-        .map((e) => e.trim())
+        .map((e) => e.trim().toLowerCase())
         .filter((e) => e && e.includes('@'));
 
       if (emailList.length === 0) {
@@ -807,44 +809,62 @@ export class VoucherService {
         };
       }
 
-      // Find users by email
-      const { data: users, error: usersError } = await supabase
-        .from('users')
-        .select('id, email')
-        .in('email', emailList);
-
-      if (usersError) {
-        return {
-          data: null,
-          error: {
-            code: usersError.code,
-            message: 'Failed to find users',
-            details: usersError,
-          },
-        };
-      }
-
-      if (!users || users.length === 0) {
-        return {
-          data: null,
-          error: {
-            code: 'NO_USERS_FOUND',
-            message: 'No users found with the provided email addresses',
-          },
-        };
-      }
-
-      // Create vouchers for each user
+      // Create vouchers for each email
       const results: { created: number; failed: { email: string; error: string }[] } = {
         created: 0,
         failed: [],
       };
 
-      for (const usr of users) {
+      // Ensure expires_at is a valid ISO string
+      let expiresAtISO: string;
+      try {
+        // Handle datetime-local input format (YYYY-MM-DDTHH:mm)
+        const expiresDate = new Date(params.expires_at);
+        if (isNaN(expiresDate.getTime())) {
+          throw new Error('Invalid date');
+        }
+        expiresAtISO = expiresDate.toISOString();
+      } catch {
+        return {
+          data: null,
+          error: {
+            code: 'INVALID_DATE',
+            message: 'Invalid expiration date format',
+          },
+        };
+      }
+
+      // Process each email individually to provide detailed feedback
+      for (const email of emailList) {
+        // Find user by email (case-insensitive using ilike)
+        const { data: users, error: userError } = await supabase
+          .from('users')
+          .select('id, email')
+          .ilike('email', email)
+          .limit(1);
+
+        if (userError) {
+          results.failed.push({
+            email,
+            error: 'Database error while looking up user',
+          });
+          continue;
+        }
+
+        if (!users || users.length === 0) {
+          results.failed.push({
+            email,
+            error: 'User not found - must create account first',
+          });
+          continue;
+        }
+
+        const usr = users[0];
+
         // Generate voucher code
         const { data: codeData, error: codeError } = await supabase.rpc(
           'generate_voucher_code',
-          { cert_type: params.certification_type }
+          { cert_type: params.certification_type, lang: params.exam_language || 'en' }
         );
 
         if (codeError || !codeData) {
@@ -862,8 +882,9 @@ export class VoucherService {
             code: codeData,
             user_id: usr.id,
             certification_type: params.certification_type as any,
+            exam_language: params.exam_language || 'en',
             quiz_id: params.quiz_id,
-            expires_at: params.expires_at,
+            expires_at: expiresAtISO,
             certification_product_id: params.certification_product_id,
             admin_notes: params.admin_notes,
             created_by: user.id,

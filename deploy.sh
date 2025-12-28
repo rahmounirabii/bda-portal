@@ -56,16 +56,46 @@ deploy_wordpress() {
 }
 
 deploy_supabase() {
-    log "Deploying Supabase Edge Functions..."
+    log "Deploying Supabase Edge Functions and Database..."
 
-    if ! command -v supabase &> /dev/null; then
+    if ! command -v supabase &> /dev/null && ! command -v npx &> /dev/null; then
         warn "Supabase CLI not found. Install with: npm install -g supabase"
         return 1
     fi
 
-    supabase functions deploy --project-ref dfsbzsxuursvqwnzruqt
+    # Push database migrations (uses linked project)
+    log "Pushing database migrations..."
+    npx supabase db push --include-all
+
+    # Deploy all functions
+    log "Deploying bulk-create-users function..."
+    npx supabase functions deploy bulk-create-users --project-ref dfsbzsxuursvqwnzruqt
+
+    log "Deploying resend-invite function..."
+    npx supabase functions deploy resend-invite --project-ref dfsbzsxuursvqwnzruqt
+
+    log "Deploying send-emails function..."
+    npx supabase functions deploy send-emails --project-ref dfsbzsxuursvqwnzruqt
+
+    log "Deploying create-user function..."
+    npx supabase functions deploy create-user --project-ref dfsbzsxuursvqwnzruqt
 
     log "Supabase functions deployed successfully!"
+    log ""
+    log "IMPORTANT: Set email provider secrets in Supabase Dashboard:"
+    log "  Go to: Project Settings > Edge Functions > Secrets"
+    log ""
+    log "  Option 1: Mailtrap (for testing/sandbox)"
+    log "    - MAILTRAP_API_TOKEN (get from mailtrap.io/sending/domains)"
+    log ""
+    log "  Option 2: Resend (recommended for production)"
+    log "    - RESEND_API_KEY (get from resend.com/api-keys)"
+    log ""
+    log "  Option 3: SendGrid"
+    log "    - SENDGRID_API_KEY"
+    log ""
+    log "  Option 4: Mailgun"
+    log "    - MAILGUN_API_KEY + MAILGUN_DOMAIN"
 }
 
 show_help() {

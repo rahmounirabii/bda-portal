@@ -40,6 +40,7 @@ export function AccessManagement() {
   const [grantFormData, setGrantFormData] = useState({
     emails: '',
     certificationType: 'CP' as CertificationType,
+    examLanguage: 'en' as 'en' | 'ar',
     durationMonths: 12,
   });
 
@@ -80,11 +81,16 @@ export function AccessManagement() {
       emailPlaceholder: 'Enter email addresses (comma or newline separated)\nexample@domain.com, user2@domain.com',
       emailHelp: 'Enter one or more email addresses, separated by commas or newlines',
       durationMonths: 'Duration (months)',
+      examLanguage: 'Exam Language',
+      languageEnglish: 'English',
+      languageArabic: 'Arabic',
+      language: 'Language',
       cancel: 'Cancel',
       granting: 'Granting...',
       cpFull: 'CP (Certified Professional)',
       scpFull: 'SCP (Senior Certified Professional)',
       accessGrantedSuccess: 'Access granted to {count} user(s) for {months} months',
+      accessGrantedPartial: 'Access granted to {count} of {total} users. Failed: {failed}',
       accessGrantedError: 'Failed to grant access',
       enterValidEmail: 'Please enter at least one valid email address',
       noUsersFound: 'No users found with the provided email addresses',
@@ -125,11 +131,16 @@ export function AccessManagement() {
       emailPlaceholder: 'أدخل عناوين البريد الإلكتروني (مفصولة بفواصل أو أسطر جديدة)\nexample@domain.com, user2@domain.com',
       emailHelp: 'أدخل عنوان بريد إلكتروني واحد أو أكثر، مفصولة بفواصل أو أسطر جديدة',
       durationMonths: 'المدة (بالأشهر)',
+      examLanguage: 'لغة الامتحان',
+      languageEnglish: 'الإنجليزية',
+      languageArabic: 'العربية',
+      language: 'اللغة',
       cancel: 'إلغاء',
       granting: 'جارٍ المنح...',
       cpFull: 'CP (محترف معتمد)',
       scpFull: 'SCP (محترف معتمد أول)',
       accessGrantedSuccess: 'تم منح الوصول لـ {count} مستخدم(ين) لمدة {months} شهر',
+      accessGrantedPartial: 'تم منح الوصول لـ {count} من {total} مستخدمين. فشل: {failed}',
       accessGrantedError: 'فشل في منح الوصول',
       enterValidEmail: 'يرجى إدخال عنوان بريد إلكتروني صالح واحد على الأقل',
       noUsersFound: 'لم يتم العثور على مستخدمين بعناوين البريد الإلكتروني المقدمة',
@@ -176,9 +187,10 @@ export function AccessManagement() {
 
   // Toggle access active status
   const toggleActiveMutation = useMutation({
-    mutationFn: async ({ userId, certType, isActive }: {
+    mutationFn: async ({ userId, certType, examLanguage, isActive }: {
       userId: string;
       certType: CertificationType;
+      examLanguage: 'en' | 'ar';
       isActive: boolean;
     }) => {
       const { supabase } = await import('@/lib/supabase');
@@ -186,7 +198,8 @@ export function AccessManagement() {
         .from('user_curriculum_access')
         .update({ is_active: !isActive })
         .eq('user_id', userId)
-        .eq('certification_type', certType);
+        .eq('certification_type', certType)
+        .eq('exam_language', examLanguage);
 
       if (error) throw error;
     },
@@ -197,9 +210,10 @@ export function AccessManagement() {
 
   // Extend access expiration
   const extendAccessMutation = useMutation({
-    mutationFn: async ({ userId, certType, months }: {
+    mutationFn: async ({ userId, certType, examLanguage, months }: {
       userId: string;
       certType: CertificationType;
+      examLanguage: 'en' | 'ar';
       months: number;
     }) => {
       const { supabase } = await import('@/lib/supabase');
@@ -210,6 +224,7 @@ export function AccessManagement() {
         .select('expires_at')
         .eq('user_id', userId)
         .eq('certification_type', certType)
+        .eq('exam_language', examLanguage)
         .single();
 
       if (!access) throw new Error('Access record not found');
@@ -229,7 +244,8 @@ export function AccessManagement() {
           is_active: true,
         })
         .eq('user_id', userId)
-        .eq('certification_type', certType);
+        .eq('certification_type', certType)
+        .eq('exam_language', examLanguage);
 
       if (error) throw error;
     },
@@ -246,59 +262,73 @@ export function AccessManagement() {
       // Parse emails (comma or newline separated)
       const emailList = grantFormData.emails
         .split(/[,\n]/)
-        .map((e) => e.trim())
+        .map((e) => e.trim().toLowerCase())
         .filter((e) => e && e.includes('@'));
 
       if (emailList.length === 0) {
         throw new Error(texts.enterValidEmail);
       }
 
-      // Find users by email
-      const { data: users, error: usersError } = await supabase
-        .from('users')
-        .select('id, email')
-        .in('email', emailList);
+      // Grant access to each email using the admin RPC function
+      const results = await Promise.all(
+        emailList.map(async (email) => {
+          const { data, error } = await supabase.rpc('admin_grant_curriculum_access', {
+            p_user_email: email,
+            p_certification_type: grantFormData.certificationType.toLowerCase(),
+            p_exam_language: grantFormData.examLanguage,
+            p_duration_months: grantFormData.durationMonths,
+          });
 
-      if (usersError) throw usersError;
+          if (error) {
+            console.error(`Error granting access to ${email}:`, error);
+            return { email, success: false, error: error.message };
+          }
 
-      if (!users || users.length === 0) {
+          // The RPC returns a JSONB object with success status
+          if (data && typeof data === 'object' && 'success' in data) {
+            return { email, success: data.success, error: data.error || null };
+          }
+
+          return { email, success: true, error: null };
+        })
+      );
+
+      const successCount = results.filter((r) => r.success).length;
+      const failedEmails = results.filter((r) => !r.success).map((r) => r.email);
+
+      if (successCount === 0) {
         throw new Error(texts.noUsersFound);
       }
 
-      // Calculate expiration date
-      const expiresAt = new Date();
-      expiresAt.setMonth(expiresAt.getMonth() + grantFormData.durationMonths);
-
-      // Create access records for each user
-      const accessRecords = users.map((user) => ({
-        user_id: user.id,
-        certification_type: grantFormData.certificationType,
-        purchased_at: new Date().toISOString(),
-        expires_at: expiresAt.toISOString(),
-        is_active: true,
-      }));
-
-      const { error: insertError } = await supabase
-        .from('user_curriculum_access')
-        .upsert(accessRecords, {
-          onConflict: 'user_id,certification_type',
-        });
-
-      if (insertError) throw insertError;
-
-      return { grantedCount: users.length, totalEmails: emailList.length };
+      return {
+        grantedCount: successCount,
+        totalEmails: emailList.length,
+        failedEmails,
+      };
     },
     onSuccess: (result) => {
-      toast.success(
-        texts.accessGrantedSuccess
-          .replace('{count}', String(result.grantedCount))
-          .replace('{months}', String(grantFormData.durationMonths))
-      );
+      if (result.failedEmails && result.failedEmails.length > 0) {
+        // Partial success
+        toast.warning(
+          texts.accessGrantedPartial
+            .replace('{count}', String(result.grantedCount))
+            .replace('{total}', String(result.totalEmails))
+            .replace('{failed}', result.failedEmails.join(', '))
+        );
+      } else {
+        // Full success
+        toast.success(
+          texts.accessGrantedSuccess
+            .replace('{count}', String(result.grantedCount))
+            .replace('{months}', String(grantFormData.durationMonths))
+        );
+      }
       queryClient.invalidateQueries({ queryKey: ['curriculum-access'] });
       setShowGrantModal(false);
       setGrantFormData({
         emails: '',
         certificationType: 'CP',
+        examLanguage: 'en',
         durationMonths: 12,
       });
     },
@@ -467,6 +497,9 @@ export function AccessManagement() {
                   {texts.certType}
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  {texts.language}
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   {texts.purchased}
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -488,7 +521,7 @@ export function AccessManagement() {
                 const expiringSoon = daysLeft > 0 && daysLeft <= 30;
 
                 return (
-                  <tr key={`${record.user_id}-${record.certification_type}`} className="hover:bg-gray-50">
+                  <tr key={`${record.user_id}-${record.certification_type}-${record.exam_language || 'en'}`} className="hover:bg-gray-50">
                     <td className="px-6 py-4">
                       <div>
                         <p className="font-medium text-gray-900">
@@ -502,6 +535,15 @@ export function AccessManagement() {
                     <td className="px-6 py-4">
                       <span className="text-sm font-medium text-gray-700">
                         {record.certification_type.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded ${
+                        record.exam_language === 'ar'
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : 'bg-blue-100 text-blue-700'
+                      }`}>
+                        {record.exam_language === 'ar' ? 'AR' : 'EN'}
                       </span>
                     </td>
                     <td className="px-6 py-4">
@@ -549,6 +591,7 @@ export function AccessManagement() {
                             toggleActiveMutation.mutate({
                               userId: record.user_id,
                               certType: record.certification_type,
+                              examLanguage: record.exam_language || 'en',
                               isActive: record.is_active,
                             })
                           }
@@ -562,6 +605,7 @@ export function AccessManagement() {
                             extendAccessMutation.mutate({
                               userId: record.user_id,
                               certType: record.certification_type,
+                              examLanguage: record.exam_language || 'en',
                               months: 12,
                             })
                           }
@@ -615,7 +659,7 @@ export function AccessManagement() {
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <Label>{texts.certificationType} *</Label>
                 <Select
@@ -633,6 +677,27 @@ export function AccessManagement() {
                   <SelectContent>
                     <SelectItem value="CP">{texts.cpFull}</SelectItem>
                     <SelectItem value="SCP">{texts.scpFull}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label>{texts.examLanguage} *</Label>
+                <Select
+                  value={grantFormData.examLanguage}
+                  onValueChange={(value) =>
+                    setGrantFormData({
+                      ...grantFormData,
+                      examLanguage: value as 'en' | 'ar',
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="en">{texts.languageEnglish}</SelectItem>
+                    <SelectItem value="ar">{texts.languageArabic}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

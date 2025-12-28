@@ -58,6 +58,7 @@ export default function ExamManagement() {
 
   // Filters state
   const [search, setSearch] = useState('');
+  const [languageTab, setLanguageTab] = useState<'en' | 'ar'>('en');
   const [categoryFilter, setCategoryFilter] = useState<ExamCategory | 'all'>('all');
   const [difficultyFilter, setDifficultyFilter] = useState<ExamDifficulty | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
@@ -65,6 +66,7 @@ export default function ExamManagement() {
   // Build filters object
   const filters = {
     search: search || undefined,
+    language: languageTab,
     category: categoryFilter !== 'all' ? categoryFilter : undefined,
     difficulty: difficultyFilter !== 'all' ? difficultyFilter : undefined,
     is_active: statusFilter === 'all' ? undefined : statusFilter === 'active',
@@ -229,6 +231,44 @@ export default function ExamManagement() {
             </div>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Language Tabs */}
+      <div className="flex border-b border-gray-200 bg-white rounded-lg shadow-sm overflow-hidden">
+        <button
+          onClick={() => setLanguageTab('en')}
+          className={cn(
+            'flex-1 px-6 py-4 text-sm font-medium transition-colors',
+            languageTab === 'en'
+              ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-600'
+              : 'text-gray-600 hover:bg-gray-50'
+          )}
+        >
+          <div className="flex items-center justify-center gap-2">
+            <Globe className="h-4 w-4" />
+            <span>{t('examMgmt.englishExams')}</span>
+            <Badge variant="secondary" className="ml-1">
+              {exams?.filter(e => e.language === 'en').length || 0}
+            </Badge>
+          </div>
+        </button>
+        <button
+          onClick={() => setLanguageTab('ar')}
+          className={cn(
+            'flex-1 px-6 py-4 text-sm font-medium transition-colors',
+            languageTab === 'ar'
+              ? 'bg-emerald-50 text-emerald-700 border-b-2 border-emerald-600'
+              : 'text-gray-600 hover:bg-gray-50'
+          )}
+        >
+          <div className="flex items-center justify-center gap-2">
+            <Globe className="h-4 w-4" />
+            <span>{t('examMgmt.arabicExams')}</span>
+            <Badge variant="secondary" className="ml-1">
+              {exams?.filter(e => e.language === 'ar').length || 0}
+            </Badge>
+          </div>
+        </button>
       </div>
 
       {/* Filters */}

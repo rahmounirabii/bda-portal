@@ -11,6 +11,8 @@
 
 export type CertificationType = 'CP' | 'SCP';
 
+export type ExamLanguage = 'en' | 'ar';
+
 export type DifficultyLevel = 'easy' | 'medium' | 'hard';
 
 export type QuestionType = 'multiple_choice' | 'true_false' | 'multi_select';
@@ -129,6 +131,7 @@ export interface ExamVoucher {
   code: string;
   user_id: string;
   certification_type: CertificationType;
+  exam_language: ExamLanguage;
   quiz_id: string | null;
   woocommerce_order_id: number | null;
   certification_product_id: string | null;
@@ -328,6 +331,7 @@ export interface UpdateCertificationProductDTO {
 export interface CreateExamVoucherDTO {
   user_id: string;
   certification_type: CertificationType;
+  exam_language: ExamLanguage;
   quiz_id?: string;
   expires_at: string;
   woocommerce_order_id?: number;
@@ -443,6 +447,7 @@ export interface CertificationProductFilters {
 export interface ExamVoucherFilters {
   user_id?: string;
   certification_type?: CertificationType;
+  exam_language?: ExamLanguage;
   status?: VoucherStatus;
   quiz_id?: string;
   search?: string;

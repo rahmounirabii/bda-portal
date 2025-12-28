@@ -723,6 +723,10 @@ export const translations = {
     'examMgmt.deactivateError': 'Failed to deactivate exam. Please try again.',
     'examMgmt.activateSuccess': 'Exam activated successfully.',
     'examMgmt.deactivateSuccess': 'Exam deactivated successfully.',
+    'examMgmt.englishExams': 'English Exams',
+    'examMgmt.arabicExams': 'Arabic Exams',
+    'examMgmt.premiumAccess': 'Premium Access',
+    'examMgmt.grantAccess': 'Grant Access',
 
     // ============= Curriculum Management =============
     'curriculum.title': 'Curriculum Modules',
@@ -765,7 +769,7 @@ export const translations = {
 
     // ============= Lesson Management =============
     'lessons.title': 'Lesson Management',
-    'lessons.subtitle': 'Manage the 42 sub-competencies of the BDA BoK framework',
+    'lessons.subtitle': 'Manage the 42 sub-competencies of the BDA BoCK™ framework',
     'lessons.newLesson': 'New Lesson',
     'lessons.totalLessons': 'Total Lessons',
     'lessons.withQuiz': 'With Quiz',
@@ -1743,6 +1747,10 @@ export const translations = {
     'examMgmt.deactivateError': 'فشل في إلغاء تفعيل الاختبار. يرجى المحاولة مرة أخرى.',
     'examMgmt.activateSuccess': 'تم تفعيل الاختبار بنجاح.',
     'examMgmt.deactivateSuccess': 'تم إلغاء تفعيل الاختبار بنجاح.',
+    'examMgmt.englishExams': 'الاختبارات الإنجليزية',
+    'examMgmt.arabicExams': 'الاختبارات العربية',
+    'examMgmt.premiumAccess': 'الوصول المميز',
+    'examMgmt.grantAccess': 'منح الوصول',
 
     // ============= Curriculum Management =============
     'curriculum.title': 'وحدات المنهج',
@@ -1785,7 +1793,7 @@ export const translations = {
 
     // ============= Lesson Management =============
     'lessons.title': 'إدارة الدروس',
-    'lessons.subtitle': 'إدارة الكفاءات الفرعية الـ 42 في إطار BDA BoK',
+    'lessons.subtitle': 'إدارة الكفاءات الفرعية الـ 42 في إطار BDA BoCK™',
     'lessons.newLesson': 'درس جديد',
     'lessons.totalLessons': 'إجمالي الدروس',
     'lessons.withQuiz': 'مع اختبار',

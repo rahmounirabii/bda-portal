@@ -153,7 +153,7 @@ export default function Signup() {
             setExistingAccountModal(prev => ({
               ...prev,
               loading: false,
-              error: result.message || 'Erreur lors de la liaison des comptes.'
+              error: result.message || 'Error linking accounts.'
             }));
           }
         } else {
@@ -173,7 +173,7 @@ export default function Signup() {
     }
   };
 
-  // Navigation vers la page de connexion
+  // Navigate to login page
   const handleNavigateToLogin = () => {
     setExistingAccountModal({ open: false, type: 'store', email: '', loading: false, error: '' });
     navigate('/login', {
@@ -206,7 +206,7 @@ export default function Signup() {
       const result = await UnifiedSignupService.handleSignup(request);
 
       if (result.success) {
-        // Succès - rediriger selon le nextStep
+        // Success - redirect based on nextStep
         toast({
           title: 'Success!',
           description: result.message,
@@ -223,14 +223,14 @@ export default function Signup() {
         }
 
       } else {
-        // Gestion des cas qui nécessitent interaction utilisateur
+        // Handle cases that require user interaction
         if (result.nextStep === 'confirm_data' && result.conflicts) {
           setConflicts(result.conflicts);
-          setStep(3); // Étape de résolution des conflits
+          setStep(3); // Conflict resolution step
         } else if (result.action === 'requires_store_password' ||
                    result.nextStep === 'provide_store_password' ||
                    result.message?.includes('EXISTING_STORE_ACCOUNT')) {
-          // Cas spécifique : compte Store existe, ouvrir le modal pour saisir le mot de passe
+          // Store account exists - open modal to enter password
           setExistingAccountModal({
             open: true,
             type: 'store',
@@ -239,7 +239,7 @@ export default function Signup() {
             error: ''
           });
         } else {
-          // Autres erreurs
+          // Other errors
           toast({
             title: 'Information',
             description: result.message,
@@ -259,8 +259,8 @@ export default function Signup() {
 
     } catch (error) {
       toast({
-        title: 'Erreur',
-        description: 'Une erreur inattendue est survenue.',
+        title: 'Error',
+        description: 'An unexpected error occurred.',
         variant: 'destructive'
       });
     } finally {

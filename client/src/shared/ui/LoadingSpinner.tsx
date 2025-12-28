@@ -7,11 +7,11 @@ interface LoadingSpinnerProps {
 }
 
 /**
- * Composant de spinner de chargement réutilisable
+ * Reusable loading spinner component
  */
 export function LoadingSpinner({
   size = 'md',
-  message = 'Chargement...',
+  message = 'Loading...',
   fullScreen = true,
 }: LoadingSpinnerProps) {
   const sizeClasses = {

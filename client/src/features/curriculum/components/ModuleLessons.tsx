@@ -1,6 +1,6 @@
 /**
  * Module Lessons Component
- * Affiche la liste des 3 leçons d'un module avec statut et déverrouillage
+ * Displays the list of 3 lessons in a module with status and unlock logic
  */
 
 import { useNavigate } from 'react-router-dom';
@@ -195,7 +195,7 @@ export function ModuleLessons({ moduleId, userId }: ModuleLessonsProps) {
                       {progress?.status === 'completed' && progress.best_quiz_score !== null && (
                         <div className="flex items-center gap-1 text-green-600">
                           <CheckCircle className="h-4 w-4" />
-                          <span>Quiz : {progress.best_quiz_score}%</span>
+                          <span>Quiz: {progress.best_quiz_score}%</span>
                         </div>
                       )}
                     </div>

@@ -87,7 +87,9 @@ export default function CertificationExamQuestionManager() {
     difficulty: 'easy' | 'medium' | 'hard';
     points: number;
     order_index: number;
-    answers: Array<CreateAnswerDTO & { tempId: string }>;
+    explanation: string; // Question-level explanation (after all answers)
+    explanation_ar: string; // Question-level explanation in Arabic
+    answers: Array<Omit<CreateAnswerDTO, 'explanation' | 'explanation_ar'> & { tempId: string }>;
   }>({
     question_text: '',
     question_text_ar: '',
@@ -96,6 +98,8 @@ export default function CertificationExamQuestionManager() {
     difficulty: 'medium',
     points: 1,
     order_index: 0,
+    explanation: '',
+    explanation_ar: '',
     answers: [],
   });
 
@@ -105,6 +109,7 @@ export default function CertificationExamQuestionManager() {
   const handleAddQuestion = () => {
     setIsAddingQuestion(true);
     setEditingQuestionId(null);
+    setFormLanguage('en'); // Reset to English tab
     setQuestionForm({
       question_text: '',
       question_text_ar: '',
@@ -113,11 +118,13 @@ export default function CertificationExamQuestionManager() {
       difficulty: 'medium',
       points: 1,
       order_index: questions.length,
+      explanation: '',
+      explanation_ar: '',
       answers: [
-        { tempId: '1', answer_text: '', answer_text_ar: '', is_correct: false, explanation: '', explanation_ar: '', order_index: 0 },
-        { tempId: '2', answer_text: '', answer_text_ar: '', is_correct: false, explanation: '', explanation_ar: '', order_index: 1 },
-        { tempId: '3', answer_text: '', answer_text_ar: '', is_correct: false, explanation: '', explanation_ar: '', order_index: 2 },
-        { tempId: '4', answer_text: '', answer_text_ar: '', is_correct: false, explanation: '', explanation_ar: '', order_index: 3 },
+        { tempId: '1', answer_text: '', answer_text_ar: '', is_correct: false, order_index: 0 },
+        { tempId: '2', answer_text: '', answer_text_ar: '', is_correct: false, order_index: 1 },
+        { tempId: '3', answer_text: '', answer_text_ar: '', is_correct: false, order_index: 2 },
+        { tempId: '4', answer_text: '', answer_text_ar: '', is_correct: false, order_index: 3 },
       ],
     });
   };
@@ -125,6 +132,9 @@ export default function CertificationExamQuestionManager() {
   const handleEditQuestion = (question: QuestionWithAnswers, questionIndex: number) => {
     setIsAddingQuestion(false);
     setEditingQuestionId(question.id);
+    setFormLanguage('en'); // Reset to English tab
+    // Get explanation from correct answer (legacy) or from question level
+    const correctAnswer = (question.answers || []).find((a: QuizAnswer) => a.is_correct);
     setQuestionForm({
       question_text: question.question_text,
       question_text_ar: question.question_text_ar || '',
@@ -133,13 +143,13 @@ export default function CertificationExamQuestionManager() {
       difficulty: question.difficulty || 'medium',
       points: question.points || 1,
       order_index: question.order_index || questionIndex,
+      explanation: (question as any).explanation || correctAnswer?.explanation || '',
+      explanation_ar: (question as any).explanation_ar || correctAnswer?.explanation_ar || '',
       answers: (question.answers || []).map((a: QuizAnswer) => ({
         tempId: a.id,
         answer_text: a.answer_text,
         answer_text_ar: a.answer_text_ar || '',
         is_correct: a.is_correct,
-        explanation: a.explanation || '',
-        explanation_ar: a.explanation_ar || '',
         order_index: a.order_index || 0,
       })),
     });
@@ -223,6 +233,7 @@ export default function CertificationExamQuestionManager() {
     }
 
     try {
+      // Put explanation on the correct answer (for backward compatibility with data model)
       const dto: CreateQuestionDTO = {
         quiz_id: examId!,
         question_text: questionForm.question_text,
@@ -236,8 +247,9 @@ export default function CertificationExamQuestionManager() {
           answer_text: a.answer_text,
           answer_text_ar: a.answer_text_ar || undefined,
           is_correct: a.is_correct,
-          explanation: a.explanation || undefined,
-          explanation_ar: a.explanation_ar || undefined,
+          // Only store explanation on correct answer(s)
+          explanation: a.is_correct ? (questionForm.explanation || undefined) : undefined,
+          explanation_ar: a.is_correct ? (questionForm.explanation_ar || undefined) : undefined,
           order_index: a.order_index,
         })),
       };
@@ -311,8 +323,6 @@ export default function CertificationExamQuestionManager() {
           answer_text: '',
           answer_text_ar: '',
           is_correct: false,
-          explanation: '',
-          explanation_ar: '',
           order_index: prev.answers.length,
         },
       ],
@@ -443,44 +453,40 @@ export default function CertificationExamQuestionManager() {
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Language Toggle */}
-            <div className="flex items-center gap-2 pb-4 border-b">
-              <Label className="text-sm font-medium text-gray-700">Form Language:</Label>
-              <div className="inline-flex rounded-lg border border-gray-200 p-1">
+            {/* Language Tabs - EN/AR completely separate sections */}
+            <div className="border-b border-gray-200">
+              <div className="flex gap-0">
                 <button
                   type="button"
                   onClick={() => setFormLanguage('en')}
                   className={cn(
-                    'px-4 py-1.5 text-sm font-medium rounded-md transition-colors',
+                    'px-6 py-3 text-sm font-semibold border-b-2 transition-colors',
                     formLanguage === 'en'
-                      ? 'bg-royal-600 text-white'
-                      : 'text-gray-600 hover:text-gray-900'
+                      ? 'border-royal-600 text-royal-600 bg-royal-50'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   )}
                 >
-                  English
+                  🇬🇧 English Version
                 </button>
                 <button
                   type="button"
                   onClick={() => setFormLanguage('ar')}
                   className={cn(
-                    'px-4 py-1.5 text-sm font-medium rounded-md transition-colors',
+                    'px-6 py-3 text-sm font-semibold border-b-2 transition-colors',
                     formLanguage === 'ar'
-                      ? 'bg-royal-600 text-white'
-                      : 'text-gray-600 hover:text-gray-900'
+                      ? 'border-royal-600 text-royal-600 bg-royal-50'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   )}
                 >
-                  العربية
+                  🇸🇦 النسخة العربية
                 </button>
               </div>
-              <p className="text-xs text-gray-500 ml-auto">
-                {formLanguage === 'en' ? 'Editing English version' : 'تحرير النسخة العربية'}
-              </p>
             </div>
 
-            {/* Question Text - English */}
+            {/* ENGLISH SECTION */}
             {formLanguage === 'en' && (
-              <div className="space-y-2">
-                <Label>
+              <div className="space-y-2 p-4 bg-blue-50/50 rounded-lg border border-blue-100">
+                <Label className="text-blue-800 font-semibold">
                   Question Text (English) <span className="text-red-500">*</span>
                 </Label>
                 <Textarea
@@ -490,14 +496,15 @@ export default function CertificationExamQuestionManager() {
                   }
                   placeholder="Enter question text in English"
                   rows={3}
+                  className="bg-white"
                 />
               </div>
             )}
 
-            {/* Question Text - Arabic */}
+            {/* ARABIC SECTION */}
             {formLanguage === 'ar' && (
-              <div className="space-y-2">
-                <Label>Question Text (Arabic)</Label>
+              <div className="space-y-2 p-4 bg-emerald-50/50 rounded-lg border border-emerald-100">
+                <Label className="text-emerald-800 font-semibold">نص السؤال (عربي)</Label>
                 <Textarea
                   value={questionForm.question_text_ar}
                   onChange={(e) =>
@@ -506,6 +513,7 @@ export default function CertificationExamQuestionManager() {
                   placeholder="أدخل نص السؤال بالعربية"
                   rows={3}
                   dir="rtl"
+                  className="bg-white"
                 />
               </div>
             )}
@@ -566,8 +574,8 @@ export default function CertificationExamQuestionManager() {
                           ...prev,
                           question_type: 'multiple_choice',
                           answers: prev.answers.length < 2 ? [
-                            { tempId: '1', answer_text: '', answer_text_ar: '', is_correct: false, explanation: '', explanation_ar: '', order_index: 0 },
-                            { tempId: '2', answer_text: '', answer_text_ar: '', is_correct: false, explanation: '', explanation_ar: '', order_index: 1 },
+                            { tempId: '1', answer_text: '', answer_text_ar: '', is_correct: false, order_index: 0 },
+                            { tempId: '2', answer_text: '', answer_text_ar: '', is_correct: false, order_index: 1 },
                           ] : updatedAnswers,
                         };
                       });
@@ -600,8 +608,8 @@ export default function CertificationExamQuestionManager() {
                         ...prev,
                         question_type: 'multi_select',
                         answers: prev.answers.length < 2 ? [
-                          { tempId: '1', answer_text: '', answer_text_ar: '', is_correct: false, explanation: '', explanation_ar: '', order_index: 0 },
-                          { tempId: '2', answer_text: '', answer_text_ar: '', is_correct: false, explanation: '', explanation_ar: '', order_index: 1 },
+                          { tempId: '1', answer_text: '', answer_text_ar: '', is_correct: false, order_index: 0 },
+                          { tempId: '2', answer_text: '', answer_text_ar: '', is_correct: false, order_index: 1 },
                         ] : prev.answers,
                       }));
                     }}
@@ -639,8 +647,8 @@ export default function CertificationExamQuestionManager() {
                           ...prev,
                           question_type: 'true_false',
                           answers: [
-                            { tempId: 'true', answer_text: 'True', answer_text_ar: 'صحيح', is_correct: false, explanation: '', explanation_ar: '', order_index: 0 },
-                            { tempId: 'false', answer_text: 'False', answer_text_ar: 'خطأ', is_correct: false, explanation: '', explanation_ar: '', order_index: 1 },
+                            { tempId: 'true', answer_text: 'True', answer_text_ar: 'صحيح', is_correct: false, order_index: 0 },
+                            { tempId: 'false', answer_text: 'False', answer_text_ar: 'خطأ', is_correct: false, order_index: 1 },
                           ],
                         }));
                       } else {
@@ -648,8 +656,8 @@ export default function CertificationExamQuestionManager() {
                           ...prev,
                           question_type: 'multiple_choice',
                           answers: [
-                            { tempId: '1', answer_text: '', answer_text_ar: '', is_correct: false, explanation: '', explanation_ar: '', order_index: 0 },
-                            { tempId: '2', answer_text: '', answer_text_ar: '', is_correct: false, explanation: '', explanation_ar: '', order_index: 1 },
+                            { tempId: '1', answer_text: '', answer_text_ar: '', is_correct: false, order_index: 0 },
+                            { tempId: '2', answer_text: '', answer_text_ar: '', is_correct: false, order_index: 1 },
                           ],
                         }));
                       }
@@ -785,67 +793,35 @@ export default function CertificationExamQuestionManager() {
                           </div>
 
                           {/* Answer Fields */}
-                          <div className="flex-1 space-y-3">
-                            <div className="space-y-2">
-                              <Label htmlFor={`answer-${answer.tempId}`} className="text-sm font-medium">
-                                {questionForm.question_type === 'true_false'
-                                  ? (index === 0 ? 'True' : 'False')
-                                  : `Answer ${index + 1}`}
-                              </Label>
-                              {formLanguage === 'en' && (
-                                <Input
-                                  value={answer.answer_text}
-                                  onChange={(e) =>
-                                    handleUpdateAnswer(answer.tempId, 'answer_text', e.target.value)
-                                  }
-                                  placeholder={`Answer ${index + 1} (English)`}
-                                  className={answer.is_correct ? 'border-green-500' : ''}
-                                  disabled={questionForm.question_type === 'true_false'}
-                                />
-                              )}
-                              {formLanguage === 'ar' && (
-                                <Input
-                                  value={answer.answer_text_ar}
-                                  onChange={(e) =>
-                                    handleUpdateAnswer(answer.tempId, 'answer_text_ar', e.target.value)
-                                  }
-                                  placeholder={`الإجابة ${index + 1} (عربي)`}
-                                  dir="rtl"
-                                  className={answer.is_correct ? 'border-green-500' : ''}
-                                  disabled={questionForm.question_type === 'true_false'}
-                                />
-                              )}
-                            </div>
-
-                            {/* Explanation (optional) */}
+                          <div className="flex-1 space-y-2">
+                            <Label htmlFor={`answer-${answer.tempId}`} className="text-sm font-medium">
+                              {questionForm.question_type === 'true_false'
+                                ? (index === 0 ? 'True' : 'False')
+                                : `Answer ${index + 1}`}
+                              {answer.is_correct && <span className="ml-2 text-green-600 text-xs">✓ Correct</span>}
+                            </Label>
                             {formLanguage === 'en' && (
-                              <div className="space-y-2">
-                                <Label className="text-xs text-gray-600">Explanation (optional)</Label>
-                                <Textarea
-                                  value={answer.explanation || ''}
-                                  onChange={(e) =>
-                                    handleUpdateAnswer(answer.tempId, 'explanation', e.target.value)
-                                  }
-                                  placeholder="Explain why this answer is correct or incorrect"
-                                  className="text-sm"
-                                  rows={2}
-                                />
-                              </div>
+                              <Input
+                                value={answer.answer_text}
+                                onChange={(e) =>
+                                  handleUpdateAnswer(answer.tempId, 'answer_text', e.target.value)
+                                }
+                                placeholder={`Answer ${index + 1} (English)`}
+                                className={answer.is_correct ? 'border-green-500' : ''}
+                                disabled={questionForm.question_type === 'true_false'}
+                              />
                             )}
                             {formLanguage === 'ar' && (
-                              <div className="space-y-2">
-                                <Label className="text-xs text-gray-600">التوضيح (اختياري)</Label>
-                                <Textarea
-                                  value={answer.explanation_ar || ''}
-                                  onChange={(e) =>
-                                    handleUpdateAnswer(answer.tempId, 'explanation_ar', e.target.value)
-                                  }
-                                  placeholder="اشرح لماذا هذه الإجابة صحيحة أو خاطئة"
-                                  className="text-sm"
-                                  dir="rtl"
-                                  rows={2}
-                                />
-                              </div>
+                              <Input
+                                value={answer.answer_text_ar}
+                                onChange={(e) =>
+                                  handleUpdateAnswer(answer.tempId, 'answer_text_ar', e.target.value)
+                                }
+                                placeholder={`الإجابة ${index + 1} (عربي)`}
+                                dir="rtl"
+                                className={answer.is_correct ? 'border-green-500' : ''}
+                                disabled={questionForm.question_type === 'true_false'}
+                              />
                             )}
                           </div>
 
@@ -893,63 +869,31 @@ export default function CertificationExamQuestionManager() {
                           </div>
 
                           {/* Answer Fields */}
-                          <div className="flex-1 space-y-3">
-                            <div className="space-y-2">
-                              <Label htmlFor={`answer-${answer.tempId}`} className="text-sm font-medium">
-                                Answer {index + 1}
-                              </Label>
-                              {formLanguage === 'en' && (
-                                <Input
-                                  value={answer.answer_text}
-                                  onChange={(e) =>
-                                    handleUpdateAnswer(answer.tempId, 'answer_text', e.target.value)
-                                  }
-                                  placeholder={`Answer ${index + 1} (English)`}
-                                  className={answer.is_correct ? 'border-blue-500' : ''}
-                                />
-                              )}
-                              {formLanguage === 'ar' && (
-                                <Input
-                                  value={answer.answer_text_ar}
-                                  onChange={(e) =>
-                                    handleUpdateAnswer(answer.tempId, 'answer_text_ar', e.target.value)
-                                  }
-                                  placeholder={`الإجابة ${index + 1} (عربي)`}
-                                  dir="rtl"
-                                  className={answer.is_correct ? 'border-blue-500' : ''}
-                                />
-                              )}
-                            </div>
-
-                            {/* Explanation (optional) */}
+                          <div className="flex-1 space-y-2">
+                            <Label htmlFor={`answer-${answer.tempId}`} className="text-sm font-medium">
+                              Answer {index + 1}
+                              {answer.is_correct && <span className="ml-2 text-blue-600 text-xs">✓ Correct</span>}
+                            </Label>
                             {formLanguage === 'en' && (
-                              <div className="space-y-2">
-                                <Label className="text-xs text-gray-600">Explanation (optional)</Label>
-                                <Textarea
-                                  value={answer.explanation || ''}
-                                  onChange={(e) =>
-                                    handleUpdateAnswer(answer.tempId, 'explanation', e.target.value)
-                                  }
-                                  placeholder="Explain why this answer is correct or incorrect"
-                                  className="text-sm"
-                                  rows={2}
-                                />
-                              </div>
+                              <Input
+                                value={answer.answer_text}
+                                onChange={(e) =>
+                                  handleUpdateAnswer(answer.tempId, 'answer_text', e.target.value)
+                                }
+                                placeholder={`Answer ${index + 1} (English)`}
+                                className={answer.is_correct ? 'border-blue-500' : ''}
+                              />
                             )}
                             {formLanguage === 'ar' && (
-                              <div className="space-y-2">
-                                <Label className="text-xs text-gray-600">التوضيح (اختياري)</Label>
-                                <Textarea
-                                  value={answer.explanation_ar || ''}
-                                  onChange={(e) =>
-                                    handleUpdateAnswer(answer.tempId, 'explanation_ar', e.target.value)
-                                  }
-                                  placeholder="اشرح لماذا هذه الإجابة صحيحة أو خاطئة"
-                                  className="text-sm"
-                                  dir="rtl"
-                                  rows={2}
-                                />
-                              </div>
+                              <Input
+                                value={answer.answer_text_ar}
+                                onChange={(e) =>
+                                  handleUpdateAnswer(answer.tempId, 'answer_text_ar', e.target.value)
+                                }
+                                placeholder={`الإجابة ${index + 1} (عربي)`}
+                                dir="rtl"
+                                className={answer.is_correct ? 'border-blue-500' : ''}
+                              />
                             )}
                           </div>
 
@@ -971,6 +915,50 @@ export default function CertificationExamQuestionManager() {
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* EXPLANATION SECTION - After all answers */}
+            <div className="space-y-4 pt-4 border-t-2 border-gray-200">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-full bg-amber-100 flex items-center justify-center">
+                  <span className="text-amber-600">💡</span>
+                </div>
+                <div>
+                  <Label className="text-base font-semibold">Answer Explanation</Label>
+                  <p className="text-xs text-gray-500">Explain why the correct answer(s) is/are correct (shown after question is answered)</p>
+                </div>
+              </div>
+
+              {formLanguage === 'en' && (
+                <div className="space-y-2 p-4 bg-amber-50/50 rounded-lg border border-amber-100">
+                  <Label className="text-amber-800 font-medium">Explanation (English)</Label>
+                  <Textarea
+                    value={questionForm.explanation}
+                    onChange={(e) =>
+                      setQuestionForm((prev) => ({ ...prev, explanation: e.target.value }))
+                    }
+                    placeholder="Explain why the correct answer is correct. This will be shown to the user after they answer the question."
+                    rows={3}
+                    className="bg-white"
+                  />
+                </div>
+              )}
+
+              {formLanguage === 'ar' && (
+                <div className="space-y-2 p-4 bg-amber-50/50 rounded-lg border border-amber-100">
+                  <Label className="text-amber-800 font-medium">التوضيح (عربي)</Label>
+                  <Textarea
+                    value={questionForm.explanation_ar}
+                    onChange={(e) =>
+                      setQuestionForm((prev) => ({ ...prev, explanation_ar: e.target.value }))
+                    }
+                    placeholder="اشرح لماذا الإجابة الصحيحة صحيحة. سيتم عرض هذا للمستخدم بعد الإجابة على السؤال."
+                    rows={3}
+                    dir="rtl"
+                    className="bg-white"
+                  />
+                </div>
+              )}
             </div>
 
             {/* Actions */}

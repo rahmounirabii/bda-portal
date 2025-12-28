@@ -1,14 +1,14 @@
 /**
  * Lesson Viewer Page
- * Page de consultation d'une leçon individuelle (1 des 42 sous-compétences)
+ * View an individual lesson (1 of the 42 sub-competencies)
  *
  * Features:
- * - Affichage du contenu riche (TipTap/Lexical JSON)
- * - Tracking de progression de lecture
- * - Tracking du temps passé
- * - Quiz de fin de leçon
- * - Navigation vers leçon suivante
- * - Système de déverrouillage séquentiel
+ * - Rich content display (TipTap/Lexical JSON)
+ * - Reading progress tracking
+ * - Time spent tracking
+ * - End-of-lesson quiz
+ * - Navigation to next lesson
+ * - Sequential unlocking system
  */
 
 import { useParams, useNavigate } from 'react-router-dom';

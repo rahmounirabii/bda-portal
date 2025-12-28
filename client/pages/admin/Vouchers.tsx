@@ -48,6 +48,7 @@ import {
   useActiveQuizzes,
   type ExamVoucher,
   type CertificationType,
+  type ExamLanguage,
   type VoucherStatus,
   type CreateExamVoucherDTO,
 } from '@/entities/quiz';
@@ -74,6 +75,7 @@ const STATUS_COLORS: Record<VoucherStatus, string> = {
 interface VoucherFormData {
   user_email: string;
   certification_type: CertificationType;
+  exam_language: ExamLanguage;
   quiz_id: string;
   validity_months: string;
   admin_notes: string;
@@ -82,6 +84,7 @@ interface VoucherFormData {
 const emptyFormData: VoucherFormData = {
   user_email: '',
   certification_type: 'CP',
+  exam_language: 'en',
   quiz_id: '',
   validity_months: '6',
   admin_notes: '',
@@ -141,6 +144,10 @@ export default function Vouchers() {
       linkedQuizHelp: 'Leave empty to allow any quiz of the selected certification type',
       validityMonths: 'Validity (Months)',
       validityHelp: 'How many months until this voucher expires',
+      examLanguage: 'Exam Language',
+      examLanguageHelp: 'Language for the certification exam',
+      languageEnglish: 'English',
+      languageArabic: 'Arabic',
       adminNotesLabel: 'Admin Notes (Optional)',
       adminNotesPlaceholder: 'Any additional notes about this voucher...',
       cancel: 'Cancel',
@@ -173,8 +180,10 @@ export default function Vouchers() {
       enterEmail: 'Please enter at least one email address',
       selectExpiration: 'Please select an expiration date',
       vouchersCreated: '{count} voucher(s) created successfully',
-      failedEmails: '{count} failed: {emails}',
+      failedEmails: '{count} failed',
+      failedDetails: 'Failed emails: {details}',
       failed: 'Failed',
+      userNotFoundBulk: 'User not found',
       expireTitle: 'Expire Old Vouchers',
       expireDescription: 'This will mark all unused vouchers past their expiration date as "expired". Continue?',
       expireConfirm: 'Expire',
@@ -233,6 +242,10 @@ export default function Vouchers() {
       linkedQuizHelp: 'اتركه فارغاً للسماح بأي اختبار من نوع الشهادة المحدد',
       validityMonths: 'الصلاحية (بالأشهر)',
       validityHelp: 'عدد الأشهر حتى انتهاء صلاحية هذه القسيمة',
+      examLanguage: 'لغة الامتحان',
+      examLanguageHelp: 'لغة امتحان الشهادة',
+      languageEnglish: 'الإنجليزية',
+      languageArabic: 'العربية',
       adminNotesLabel: 'ملاحظات المسؤول (اختياري)',
       adminNotesPlaceholder: 'أي ملاحظات إضافية حول هذه القسيمة...',
       cancel: 'إلغاء',
@@ -265,8 +278,10 @@ export default function Vouchers() {
       enterEmail: 'يرجى إدخال عنوان بريد إلكتروني واحد على الأقل',
       selectExpiration: 'يرجى تحديد تاريخ انتهاء الصلاحية',
       vouchersCreated: 'تم إنشاء {count} قسيمة/قسائم بنجاح',
-      failedEmails: 'فشل {count}: {emails}',
+      failedEmails: 'فشل {count}',
+      failedDetails: 'البريد الإلكتروني الفاشل: {details}',
       failed: 'فشل',
+      userNotFoundBulk: 'المستخدم غير موجود',
       expireTitle: 'إنهاء صلاحية القسائم القديمة',
       expireDescription: 'سيتم تعليم جميع القسائم غير المستخدمة التي تجاوزت تاريخ انتهاء صلاحيتها بأنها "منتهية الصلاحية". متابعة؟',
       expireConfirm: 'إنهاء الصلاحية',
@@ -302,6 +317,7 @@ export default function Vouchers() {
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [bulkEmails, setBulkEmails] = useState('');
   const [bulkCertType, setBulkCertType] = useState<CertificationType>('CP');
+  const [bulkExamLanguage, setBulkExamLanguage] = useState<ExamLanguage>('en');
   const [bulkExpiresAt, setBulkExpiresAt] = useState('');
   const [bulkAdminNotes, setBulkAdminNotes] = useState('');
 
@@ -379,6 +395,7 @@ export default function Vouchers() {
       const dto: CreateExamVoucherDTO = {
         user_id: userLookup.user_id,
         certification_type: formData.certification_type,
+        exam_language: formData.exam_language,
         quiz_id: formData.quiz_id || undefined,
         expires_at: expiresAt.toISOString(),
         admin_notes: formData.admin_notes || undefined,
@@ -450,6 +467,7 @@ export default function Vouchers() {
       const result = await createVouchersBulkMutation.mutateAsync({
         emails: bulkEmails,
         certification_type: bulkCertType,
+        exam_language: bulkExamLanguage,
         expires_at: bulkExpiresAt,
         admin_notes: bulkAdminNotes || null,
         quiz_id: null,
@@ -458,22 +476,47 @@ export default function Vouchers() {
 
       // Show success/failure summary
       const successMsg = texts.vouchersCreated.replace('{count}', String(result.created));
-      const failMsg = result.failed.length > 0
-        ? texts.failedEmails
-            .replace('{count}', String(result.failed.length))
-            .replace('{emails}', result.failed.map((f) => f.email).join(', '))
-        : '';
 
-      toast({
-        title: result.created > 0 ? texts.success : texts.failed,
-        description: failMsg ? `${successMsg}. ${failMsg}` : successMsg,
-        variant: result.created > 0 ? 'default' : 'destructive',
-      });
+      if (result.failed.length > 0) {
+        // Build detailed failure message
+        const failedDetails = result.failed
+          .map((f) => `${f.email}: ${f.error}`)
+          .join('\n');
+
+        // Show detailed toast for failures
+        toast({
+          title: result.created > 0 ? texts.success : texts.failed,
+          description: (
+            <div className="space-y-2">
+              <p>{successMsg}</p>
+              <p className="text-amber-600 font-medium">
+                {texts.failedEmails.replace('{count}', String(result.failed.length))}
+              </p>
+              <ul className="text-sm text-gray-600 list-disc list-inside max-h-32 overflow-y-auto">
+                {result.failed.map((f, i) => (
+                  <li key={i}>
+                    <span className="font-mono">{f.email}</span>: {f.error}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ),
+          variant: result.created > 0 ? 'default' : 'destructive',
+          duration: 10000, // Show longer for detailed message
+        });
+      } else {
+        // All succeeded
+        toast({
+          title: texts.success,
+          description: successMsg,
+        });
+      }
 
       // Reset form and close modal if any succeeded
       if (result.created > 0) {
         setBulkEmails('');
         setBulkCertType('CP');
+        setBulkExamLanguage('en');
         setBulkExpiresAt('');
         setBulkAdminNotes('');
         setShowBulkModal(false);
@@ -705,6 +748,9 @@ export default function Vouchers() {
                           <Badge variant="outline">
                             {CERTIFICATION_LABELS[voucher.certification_type]}
                           </Badge>
+                          <Badge variant="outline" className={voucher.exam_language === 'ar' ? 'bg-emerald-50 text-emerald-700 border-emerald-300' : 'bg-blue-50 text-blue-700 border-blue-300'}>
+                            {voucher.exam_language === 'ar' ? 'AR' : 'EN'}
+                          </Badge>
                         </div>
                       </div>
                     </div>
@@ -843,6 +889,30 @@ export default function Vouchers() {
               </Select>
             </div>
 
+            {/* Exam Language */}
+            <div>
+              <Label htmlFor="exam-lang">
+                {texts.examLanguage} <span className="text-red-500">*</span>
+              </Label>
+              <Select
+                value={formData.exam_language}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, exam_language: value as ExamLanguage })
+                }
+              >
+                <SelectTrigger id="exam-lang">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="en">{texts.languageEnglish}</SelectItem>
+                  <SelectItem value="ar">{texts.languageArabic}</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-gray-500 mt-1">
+                {texts.examLanguageHelp}
+              </p>
+            </div>
+
             {/* Quiz Link */}
             <div>
               <Label htmlFor="quiz-id">{texts.linkedQuiz}</Label>
@@ -964,6 +1034,25 @@ export default function Vouchers() {
                       <SelectItem value="SCP">{texts.scpLabelFull}</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+
+                {/* Exam Language */}
+                <div>
+                  <Label htmlFor="bulk-exam-lang">
+                    {texts.examLanguage} <span className="text-red-500">*</span>
+                  </Label>
+                  <Select value={bulkExamLanguage} onValueChange={(v) => setBulkExamLanguage(v as ExamLanguage)}>
+                    <SelectTrigger id="bulk-exam-lang">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="en">{texts.languageEnglish}</SelectItem>
+                      <SelectItem value="ar">{texts.languageArabic}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {texts.examLanguageHelp}
+                  </p>
                 </div>
 
                 {/* Expiration Date */}

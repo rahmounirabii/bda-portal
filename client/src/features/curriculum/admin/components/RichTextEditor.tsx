@@ -24,6 +24,7 @@ interface RichTextEditorProps {
   content: RichContent | null;
   onChange: (content: RichContent) => void;
   placeholder?: string;
+  dir?: 'ltr' | 'rtl';
 }
 
 /**
@@ -34,7 +35,10 @@ export function RichTextEditor({
   content,
   onChange,
   placeholder = 'Start writing your module content...',
+  dir = 'ltr',
 }: RichTextEditorProps) {
+  const isRTL = dir === 'rtl';
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -64,8 +68,8 @@ export function RichTextEditor({
     },
     editorProps: {
       attributes: {
-        class:
-          'prose prose-lg max-w-none focus:outline-none min-h-[400px] px-4 py-3',
+        class: `prose prose-lg max-w-none focus:outline-none min-h-[400px] px-4 py-3 ${isRTL ? 'text-right' : ''}`,
+        dir: dir,
       },
     },
   });

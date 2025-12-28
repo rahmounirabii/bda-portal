@@ -232,7 +232,12 @@ export function CurriculumModuleManager() {
                           <p className="font-medium text-gray-900">
                             {module.competency_name}
                           </p>
-                          <p className="text-sm text-gray-500">
+                          {module.competency_name_ar && (
+                            <p className="text-sm text-gray-600" dir="rtl">
+                              {module.competency_name_ar}
+                            </p>
+                          )}
+                          <p className="text-xs text-gray-500 mt-1">
                             {module.certification_type.toUpperCase()}
                           </p>
                         </div>

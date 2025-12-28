@@ -21,6 +21,10 @@ import {
   Info,
   Server,
   Zap,
+  Users,
+  GraduationCap,
+  Award,
+  Calendar,
 } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 
@@ -28,7 +32,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 // Types
 // ============================================================================
 
-type TabType = 'general' | 'email' | 'notifications' | 'security' | 'maintenance';
+type TabType = 'general' | 'email' | 'notifications' | 'security' | 'members' | 'maintenance';
 
 interface SettingGroup {
   id: string;
@@ -100,6 +104,18 @@ export default function SystemSettings() {
     maintenanceMessage: 'The system is currently under maintenance. Please check back later.',
     debugMode: false,
     logLevel: 'error',
+
+    // Member Settings
+    cpCertificateValidity: 24, // months
+    scpCertificateValidity: 36, // months
+    examAttemptLimit: 3,
+    retakeCooldownDays: 30,
+    memberIdPrefix: 'BDA',
+    requirePhotoForCertificate: true,
+    autoRenewReminder: 90, // days before expiry
+    profileCompletionRequired: true,
+    allowMultipleCertifications: true,
+    curriculumAccessDuration: 12, // months
   });
 
   // Handle setting change
@@ -357,6 +373,99 @@ export default function SystemSettings() {
     </div>
   );
 
+  // Render Members Tab
+  const renderMembers = () => (
+    <div className="space-y-6">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-6 flex items-center gap-2">
+          <GraduationCap className="w-5 h-5 text-royal-600" />
+          {isRTL ? 'إعدادات الشهادات' : 'Certification Settings'}
+        </h3>
+        <div className="space-y-6">
+          {[
+            { key: 'cpCertificateValidity', label: isRTL ? 'صلاحية شهادة CP (أشهر)' : 'CP Certificate Validity (months)', type: 'number' },
+            { key: 'scpCertificateValidity', label: isRTL ? 'صلاحية شهادة SCP (أشهر)' : 'SCP Certificate Validity (months)', type: 'number' },
+            { key: 'examAttemptLimit', label: isRTL ? 'الحد الأقصى لمحاولات الامتحان' : 'Max Exam Attempts', type: 'number' },
+            { key: 'retakeCooldownDays', label: isRTL ? 'فترة الانتظار لإعادة الامتحان (أيام)' : 'Retake Cooldown (days)', type: 'number' },
+            { key: 'curriculumAccessDuration', label: isRTL ? 'مدة الوصول للمنهج (أشهر)' : 'Curriculum Access Duration (months)', type: 'number' },
+          ].map(setting => (
+            <div key={setting.key} className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4">
+              <label className="w-64 text-sm font-medium text-gray-700">{setting.label}</label>
+              {renderSettingInput(setting.key, setting as any)}
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-8 space-y-4">
+          {[
+            { key: 'requirePhotoForCertificate', label: isRTL ? 'طلب صورة للشهادة' : 'Require Photo for Certificate', desc: isRTL ? 'يجب رفع صورة شخصية لإصدار الشهادة' : 'Profile photo required for certificate' },
+            { key: 'allowMultipleCertifications', label: isRTL ? 'السماح بشهادات متعددة' : 'Allow Multiple Certifications', desc: isRTL ? 'السماح للمستخدم بالحصول على CP و SCP' : 'Allow user to hold both CP and SCP' },
+          ].map(setting => (
+            <div key={setting.key} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <div>
+                <p className="font-medium text-gray-900">{setting.label}</p>
+                <p className="text-sm text-gray-500">{setting.desc}</p>
+              </div>
+              {renderSettingInput(setting.key, { type: 'boolean', value: (settings as any)[setting.key] })}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-6 flex items-center gap-2">
+          <Users className="w-5 h-5 text-royal-600" />
+          {isRTL ? 'إعدادات العضوية' : 'Member Profile Settings'}
+        </h3>
+        <div className="space-y-6">
+          {[
+            { key: 'memberIdPrefix', label: isRTL ? 'بادئة رقم العضوية' : 'Member ID Prefix', type: 'text' },
+            { key: 'autoRenewReminder', label: isRTL ? 'تذكير التجديد التلقائي (أيام قبل الانتهاء)' : 'Auto-Renew Reminder (days before expiry)', type: 'number' },
+          ].map(setting => (
+            <div key={setting.key} className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4">
+              <label className="w-64 text-sm font-medium text-gray-700">{setting.label}</label>
+              {renderSettingInput(setting.key, setting as any)}
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-8 space-y-4">
+          {[
+            { key: 'profileCompletionRequired', label: isRTL ? 'اكتمال الملف الشخصي مطلوب' : 'Profile Completion Required', desc: isRTL ? 'يجب إكمال الملف الشخصي للتقدم للامتحان' : 'Complete profile required before exam booking' },
+          ].map(setting => (
+            <div key={setting.key} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <div>
+                <p className="font-medium text-gray-900">{setting.label}</p>
+                <p className="text-sm text-gray-500">{setting.desc}</p>
+              </div>
+              {renderSettingInput(setting.key, { type: 'boolean', value: (settings as any)[setting.key] })}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-6 flex items-center gap-2">
+          <Award className="w-5 h-5 text-royal-600" />
+          {isRTL ? 'إحصائيات الأعضاء' : 'Member Statistics'}
+        </h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[
+            { label: isRTL ? 'إجمالي الأعضاء' : 'Total Members', value: '1,234' },
+            { label: isRTL ? 'حاملي CP' : 'CP Holders', value: '856' },
+            { label: isRTL ? 'حاملي SCP' : 'SCP Holders', value: '378' },
+            { label: isRTL ? 'الشهادات المنتهية' : 'Expiring Soon', value: '45' },
+          ].map((item, index) => (
+            <div key={index} className="p-4 bg-gray-50 rounded-lg">
+              <p className="text-xs text-gray-500 uppercase tracking-wide">{item.label}</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{item.value}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
   // Render Maintenance Tab
   const renderMaintenance = () => (
     <div className="space-y-6">
@@ -520,6 +629,7 @@ export default function SystemSettings() {
             { id: 'email', label: isRTL ? 'البريد' : 'Email', icon: Mail },
             { id: 'notifications', label: isRTL ? 'الإشعارات' : 'Notifications', icon: Bell },
             { id: 'security', label: isRTL ? 'الأمان' : 'Security', icon: Shield },
+            { id: 'members', label: isRTL ? 'الأعضاء' : 'Members', icon: Users },
             { id: 'maintenance', label: isRTL ? 'الصيانة' : 'Maintenance', icon: Server },
           ].map((tab) => (
             <button
@@ -543,6 +653,7 @@ export default function SystemSettings() {
       {activeTab === 'email' && renderEmail()}
       {activeTab === 'notifications' && renderNotifications()}
       {activeTab === 'security' && renderSecurity()}
+      {activeTab === 'members' && renderMembers()}
       {activeTab === 'maintenance' && renderMaintenance()}
     </div>
   );

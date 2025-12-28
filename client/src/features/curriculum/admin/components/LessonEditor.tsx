@@ -289,7 +289,7 @@ export function LessonEditor({ lessonId, isOpen, onClose }: LessonEditorProps) {
                     )}
                   />
 
-                  {/* Ordre */}
+                  {/* Order in module */}
                   <FormField
                     control={form.control}
                     name="order_index"
@@ -333,7 +333,7 @@ export function LessonEditor({ lessonId, isOpen, onClose }: LessonEditorProps) {
                       <FormItem>
                         <FormLabel>Title (English) *</FormLabel>
                         <FormControl>
-                          <Input placeholder="Ex: Introduction to BDA BoK Framework" {...field} />
+                          <Input placeholder="Ex: Introduction to BDA BoCK™ Framework" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -359,7 +359,7 @@ export function LessonEditor({ lessonId, isOpen, onClose }: LessonEditorProps) {
                     )}
                   />
 
-                  {/* Description FR */}
+                  {/* Description (English) */}
                   <FormField
                     control={form.control}
                     name="description"
@@ -524,7 +524,7 @@ export function LessonEditor({ lessonId, isOpen, onClose }: LessonEditorProps) {
                     )}
                   />
 
-                  {/* Quiz requis */}
+                  {/* Quiz required toggle */}
                   <FormField
                     control={form.control}
                     name="quiz_required"

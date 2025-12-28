@@ -84,9 +84,9 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
     try {
       await AuthService.signOut();
       closeSidebar();
-      // La redirection sera gérée par le AuthProvider
+      // Redirect will be handled by AuthProvider
     } catch (error) {
-      console.error('Erreur lors de la déconnexion:', error);
+      console.error('Error during logout:', error);
     }
   };
 

@@ -21,22 +21,34 @@ dotenv.config();
 // ============================================================================
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || '';
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || '';
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || '';
 const BATCH_SIZE = 10; // Process 10 emails at a time
 const MAX_RUNTIME = 5 * 60 * 1000; // 5 minutes max runtime
 
-// Email configuration (customize based on your email provider)
-const EMAIL_CONFIG = {
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.SMTP_PORT || '587'),
-  secure: process.env.SMTP_SECURE === 'true',
-  auth: {
-    user: process.env.SMTP_USER || '',
-    pass: process.env.SMTP_PASS || '',
-  },
-};
+// Detect if running locally (Mailpit available at port 54325)
+const IS_LOCAL = SUPABASE_URL.includes('127.0.0.1') || SUPABASE_URL.includes('localhost');
 
-const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@bda-association.com';
+// Email configuration
+// Local: Use Supabase's Mailpit (SMTP on port 54325)
+// Production: Use configured SMTP provider
+const EMAIL_CONFIG = IS_LOCAL
+  ? {
+      host: '127.0.0.1',
+      port: 54325, // Mailpit SMTP port
+      secure: false,
+      auth: undefined as any, // No auth needed for Mailpit
+    }
+  : {
+      host: process.env.SMTP_HOST || 'smtp.gmail.com',
+      port: parseInt(process.env.SMTP_PORT || '587'),
+      secure: process.env.SMTP_SECURE === 'true',
+      auth: {
+        user: process.env.SMTP_USER || '',
+        pass: process.env.SMTP_PASS || '',
+      },
+    };
+
+const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@bda-global.org';
 const FROM_NAME = process.env.FROM_NAME || 'BDA Association';
 
 // ============================================================================
@@ -113,17 +125,31 @@ async function getEmailTemplate(templateName: string): Promise<{
 
 async function sendEmail(emailItem: any): Promise<boolean> {
   try {
-    // Get template
-    const template = await getEmailTemplate(emailItem.template_name);
+    let subject: string;
+    let htmlBody: string;
+    let textBody: string;
 
-    if (!template) {
-      throw new Error(`Template not found: ${emailItem.template_name}`);
+    // Check if template_data contains embedded html_body/text_body
+    // (used by welcome_account_created and other inline templates)
+    if (emailItem.template_data?.html_body && emailItem.template_data?.text_body) {
+      // Use embedded template content
+      subject = emailItem.subject; // Subject is already set in email_queue
+      htmlBody = emailItem.template_data.html_body;
+      textBody = emailItem.template_data.text_body;
+      console.log(`📧 Using embedded template for: ${emailItem.template_name}`);
+    } else {
+      // Fetch template from database
+      const template = await getEmailTemplate(emailItem.template_name);
+
+      if (!template) {
+        throw new Error(`Template not found: ${emailItem.template_name}`);
+      }
+
+      // Replace variables in subject and body
+      subject = replaceTemplateVariables(template.subject, emailItem.template_data);
+      htmlBody = replaceTemplateVariables(template.html_body, emailItem.template_data);
+      textBody = replaceTemplateVariables(template.text_body, emailItem.template_data);
     }
-
-    // Replace variables in subject and body
-    const subject = replaceTemplateVariables(template.subject, emailItem.template_data);
-    const htmlBody = replaceTemplateVariables(template.html_body, emailItem.template_data);
-    const textBody = replaceTemplateVariables(template.text_body, emailItem.template_data);
 
     // Send email
     const info = await transporter.sendMail({
@@ -273,22 +299,33 @@ async function processEmailQueue(): Promise<void> {
 // ============================================================================
 
 async function main() {
+  console.log('\n📬 BDA Email Worker');
+  console.log('==================');
+
   // Verify configuration
   if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
     console.error('❌ Missing Supabase configuration');
     process.exit(1);
   }
 
-  if (!EMAIL_CONFIG.auth.user || !EMAIL_CONFIG.auth.pass) {
-    console.error('❌ Missing SMTP configuration');
-    console.log('   Please set SMTP_USER and SMTP_PASS environment variables');
-    process.exit(1);
+  // Check SMTP configuration (not required for local Mailpit)
+  if (IS_LOCAL) {
+    console.log('🔧 Mode: LOCAL DEVELOPMENT (Mailpit)');
+    console.log('📮 View emails at: http://127.0.0.1:54324');
+  } else {
+    console.log('🔧 Mode: PRODUCTION');
+    if (!EMAIL_CONFIG.auth?.user || !EMAIL_CONFIG.auth?.pass) {
+      console.error('❌ Missing SMTP configuration');
+      console.log('   Please set SMTP_USER and SMTP_PASS environment variables');
+      process.exit(1);
+    }
+    console.log(`📧 SMTP: ${EMAIL_CONFIG.host}:${EMAIL_CONFIG.port}`);
   }
 
   // Verify email transporter
   try {
     await transporter.verify();
-    console.log('✅ Email transporter ready');
+    console.log('✅ Email transporter ready\n');
   } catch (error) {
     console.error('❌ Email transporter verification failed:', error);
     process.exit(1);
@@ -302,7 +339,11 @@ async function main() {
 }
 
 // Run if called directly
-if (require.main === module) {
+// Using ESM-compatible check
+const isMainModule = import.meta.url === `file://${process.argv[1]}` ||
+                     process.argv[1]?.endsWith('email-worker.ts');
+
+if (isMainModule) {
   main().catch((error) => {
     console.error('Fatal error:', error);
     process.exit(1);

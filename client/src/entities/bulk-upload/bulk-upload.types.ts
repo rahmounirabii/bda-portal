@@ -56,6 +56,65 @@ export interface UploadProgress {
   message: string;
 }
 
+// ============================================================================
+// Job Tracking Types (for real-time progress)
+// ============================================================================
+
+export type BulkUploadJobStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
+export type BulkUploadItemStatus = 'pending' | 'processing' | 'success' | 'error' | 'skipped';
+
+export interface BulkUploadJob {
+  id: string;
+  created_by: string | null;
+  status: BulkUploadJobStatus;
+  total_users: number;
+  processed_count: number;
+  success_count: number;
+  error_count: number;
+  skipped_count: number;
+  email_sent_count: number; // Track email sending progress
+  send_welcome_email: boolean;
+  activate_content: boolean;
+  error_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type BulkUploadEmailStatus = 'pending' | 'sending' | 'sent' | 'failed' | 'skipped';
+
+export interface BulkUploadItem {
+  id: string;
+  job_id: string;
+  row_number: number;
+  email: string;
+  full_name: string;
+  phone: string | null;
+  country_code: string | null;
+  language: string;
+  certification_track: string | null;
+  status: BulkUploadItemStatus;
+  email_status: BulkUploadEmailStatus; // Track email sending status per item
+  error_message: string | null;
+  created_user_id: string | null;
+  email_queued: boolean;
+  password_reset_link: string | null;
+  processed_at: string | null;
+  created_at: string;
+}
+
+// Real-time subscription payload
+export interface JobUpdatePayload {
+  new: BulkUploadJob;
+  old: BulkUploadJob | null;
+}
+
+export interface ItemUpdatePayload {
+  new: BulkUploadItem;
+  old: BulkUploadItem | null;
+}
+
 // Expected Excel template columns
 export const EXCEL_COLUMNS = {
   full_name: {
