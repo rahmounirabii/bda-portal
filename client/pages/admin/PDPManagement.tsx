@@ -54,7 +54,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
-import { createAdminClient } from "@/shared/config/supabase-admin.config";
 import {
   Building2,
   Search,
@@ -238,36 +237,42 @@ export default function PDPManagement() {
   // Mutations
   const createPartnerMutation = useMutation({
     mutationFn: async (formData: typeof newPartnerForm) => {
-      // First, create user account with pdp role using admin client
-      const adminClient = createAdminClient();
-      const tempPassword = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      // Get current session for authorization
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
 
-      const { data: userData, error: userError } = await adminClient.auth.admin.createUser({
-        email: formData.email,
-        password: tempPassword,
-        email_confirm: true,
-        user_metadata: {
-          role: 'pdp',
-          source: 'admin_created',
-        },
-      });
+      // Create user via Edge Function (secure - uses service role key on server)
+      const nameParts = formData.contact_person.split(' ');
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.slice(1).join(' ') || '';
 
-      if (userError) throw userError;
-      if (!userData.user) throw new Error('Failed to create user');
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            email: formData.email,
+            first_name: firstName,
+            last_name: lastName,
+            phone: formData.contact_phone,
+            country_code: formData.country,
+            role: 'pdp',
+            source: 'admin_created',
+          }),
+        }
+      );
 
-      // Update user profile in public.users table
-      const { error: profileError } = await supabase
-        .from('users')
-        .update({
-          role: 'pdp',
-          first_name: formData.contact_person.split(' ')[0] || '',
-          last_name: formData.contact_person.split(' ').slice(1).join(' ') || '',
-          phone: formData.contact_phone,
-          country_code: formData.country,
-        })
-        .eq('id', userData.user.id);
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to create user');
+      }
 
-      if (profileError) throw profileError;
+      const userId = result.user_id;
+      if (!userId) throw new Error('Failed to create user');
 
       // Partner record should be auto-created by trigger, update with company info
       const { error: partnerError } = await supabase
@@ -281,7 +286,7 @@ export default function PDPManagement() {
           city: formData.city,
           address: formData.address,
         })
-        .eq('id', userData.user.id);
+        .eq('id', userId);
 
       if (partnerError) throw partnerError;
 
@@ -289,7 +294,7 @@ export default function PDPManagement() {
       const { error: profileExistsError } = await supabase
         .from('pdp_partner_profiles')
         .upsert({
-          partner_id: userData.user.id,
+          partner_id: userId,
           organization_name: formData.company_name,
           legal_name: formData.company_name,
           primary_contact_name: formData.contact_person,
@@ -301,7 +306,7 @@ export default function PDPManagement() {
 
       if (profileExistsError) throw profileExistsError;
 
-      return userData.user;
+      return { id: userId };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'pdp-partners'] });
