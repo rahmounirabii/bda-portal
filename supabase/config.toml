@@ -190,8 +190,8 @@ otp_length = 6
 # Number of seconds before the email OTP expires (defaults to 1 hour).
 otp_expiry = 3600
 
-# SMTP Configuration - Mailtrap Sandbox
-# Emails go to Mailtrap inbox for testing (local & production)
+# SMTP Configuration - Mailtrap (Sandbox for testing)
+# Auth emails captured in Mailtrap inbox for review before going live
 [auth.email.smtp]
 enabled = true
 host = "sandbox.smtp.mailtrap.io"
