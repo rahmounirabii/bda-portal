@@ -7,7 +7,12 @@
 -- UPDATE AUTO_GRANT_CURRICULUM_ACCESS FUNCTION
 -- =============================================================================
 
--- Drop and recreate the function with exam_language support
+-- Drop existing functions first to avoid signature conflicts
+DROP FUNCTION IF EXISTS public.auto_grant_curriculum_access(UUID, TEXT, INTEGER, INTEGER, TIMESTAMPTZ, TIMESTAMPTZ);
+DROP FUNCTION IF EXISTS public.auto_grant_curriculum_access(UUID, TEXT, INTEGER, INTEGER, TIMESTAMPTZ, TIMESTAMPTZ, TEXT);
+DROP FUNCTION IF EXISTS public.admin_grant_curriculum_access(TEXT, TEXT, TEXT, INTEGER);
+
+-- Recreate the function with exam_language support
 CREATE OR REPLACE FUNCTION public.auto_grant_curriculum_access(
     p_user_id UUID,
     p_certification_type TEXT,
