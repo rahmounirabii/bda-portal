@@ -1078,16 +1078,24 @@ export default function CertificationExamQuestionManager() {
                                     <span className="ml-2 text-xs font-semibold text-green-700">✓ Correct</span>
                                   )}
                                 </span>
-                                {answer.explanation && (
-                                  <p className="text-xs mt-1 text-gray-600 italic">
-                                    💡 {answer.explanation}
-                                  </p>
-                                )}
                               </div>
                             </div>
                           </div>
                         ))}
                       </div>
+                      {/* Explanation Section - After all answers */}
+                      {(() => {
+                        const explanation = (question as any).explanation ||
+                          (question.answers || []).find((a: QuizAnswer) => a.is_correct)?.explanation;
+                        return explanation ? (
+                          <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                            <p className="text-sm text-amber-800">
+                              <span className="font-semibold">💡 Explanation:</span>{' '}
+                              <span className="italic">{explanation}</span>
+                            </p>
+                          </div>
+                        ) : null;
+                      })()}
                     </div>
                     <div className="flex gap-2 ml-4">
                       <Button size="sm" variant="ghost" onClick={() => handleEditQuestion(question, index)}>
